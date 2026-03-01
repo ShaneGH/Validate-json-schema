@@ -1,10 +1,6 @@
 import { Schema, ConcreteSchema, TypedSchema } from "./jsonSchema"
 import { ValidationContext } from "./validationContext"
-import {
-    tpl,
-    logAnd,
-    concat2
-} from "./utils.js"
+import { tpl, logAnd } from "./utils.js"
 
 const emptyReadOnlyList: readonly any[] = []
 const emptyRefPaths: readonly RefPath[] = []
