@@ -1,5 +1,6 @@
 
 import { JsonDocument } from "./jsonSchema"
+import { addToRange, advanceRangeCursor, create as createRange} from "./rangeCollection.js"
 import { validateDocument, ValidationError } from "./validate.js"
 
 let count = 0
@@ -526,6 +527,39 @@ function schemaError(name: string, f: (() => ValidationError[]), msg: string) {
         ['#/properties/add_fallthrough/patternProperties/^xx/type','add_fallthrough/xx_xx'],
         ['#/properties/add_fallthrough/additionalProperties/type','add_fallthrough/z']
     ])
+}());
+
+
+(function range() {
+    const range = createRange()
+
+    const numbers = [ 4, 2, 8]
+    // [...Array(5).keys()]
+    //     .map(i => [Math.random(), i * 2])
+    //     .sort((x, y) => x[0] - y[0])
+    //     .map(x => x[1]);
+
+        console.log(numbers)
+    for (let n of numbers) {
+        console.log("adding", n, range.items)
+        addToRange(range, n)
+        console.log("added", n, range.items)
+    }
+
+    console.dir(range, {depth: 100})
+
+    let i = 0
+    let cursor = 0 as "NOT_FOUND" | "EXHAUSTED_CURSOR" | number
+    while (typeof cursor === "number") {
+        cursor = advanceRangeCursor(range, cursor, i)
+        console.assert(typeof cursor === "number"
+            ? i % 2 == 0
+            : cursor === "EXHAUSTED_CURSOR"
+                ? i >= 1000
+                : i % 2 == 1, cursor, i)
+
+        i += 2
+    }
 }());
 
 

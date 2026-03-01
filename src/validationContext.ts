@@ -2,6 +2,7 @@
 import {
     JsonDocument, Schema
 } from "./jsonSchema"
+import { Range } from "./rangeCollection"
 
 type Nil = null | undefined
 
@@ -15,6 +16,17 @@ export type ValidationContext = Readonly<{
     location: URL
     anchors: Anchors
 }>
+
+export type MutableValidationState = {
+    visitedProperties?: {
+        visited: Record<string, true>,
+        unevaluated?: Schema[]
+    },
+    visitedItems?: {
+        visited: Range,
+        unevaluated?: Schema[]
+    }
+}
 
 const defaultBaseUrl = URL.parse("schema-parser://missing-root")!
 function resolveUri(uri: string, alternateRoot?: URL | Nil): URL | null {

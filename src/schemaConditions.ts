@@ -11,14 +11,6 @@ type RefPath = Readonly<{
     url: URL
 }>
 
-type SchemaPath = 
-    | "$ref"
-    | "$dynamicRef"
-    | "anyOf"
-    | "allOf"
-    | "oneOf"
-    | "not"
-
 export type RefCondition = Readonly<{
     $type: "ref"
     name: string,
