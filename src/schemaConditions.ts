@@ -19,11 +19,15 @@ type SchemaPath =
     | "oneOf"
     | "not"
 
+export type RefCondition = Readonly<{
+    $type: "ref"
+    name: string,
+    condition: SchemaCondition
+}>
 function resolveRef(
     context: ValidationContext, 
     ref: string, 
     type: "ref" | "dynamicRef",
-    path: readonly string[],
     refPath: readonly RefPath[]): SchemaCondition {
 
     const loc = URL.parse(ref, context.location)
@@ -52,7 +56,11 @@ function resolveRef(
             throw new Error("???4")
         }
 
-        return _build(context, anchor, [...path, loc.hash], refPath)
+        return {
+            $type: "ref",
+            name: loc.hash,
+            condition: _build(context, anchor, refPath)
+        }
     }
 
     if (loc.hash.length > 1 && loc.hash[1] !== "/") {
@@ -68,7 +76,17 @@ function resolveRef(
         }
     }
 
-    return _build(context, target, [...path, loc.hash], refPath)
+    return {
+        $type: "ref",
+        name: loc.hash,
+        condition: _build(context, target, refPath)
+    }
+}
+
+function ref(schemaCondition: RefCondition, f: (x: TypedSchema) => readonly SchemaError[]) {
+    return prependSchemaPath(
+        _execute(schemaCondition.condition, f),
+        schemaCondition.name)
 }
 
 export type RootCondition = Readonly<{
@@ -85,7 +103,7 @@ export type AllOfCondition = Readonly<{
 }>
 function _allOf(schemaConditions: readonly SchemaCondition[], f: (x: TypedSchema) => readonly SchemaError[], addPathToErrors = true): readonly SchemaError[] {
     return schemaConditions.reduce((s, x, i) => {
-        const result = execute(x, f)
+        const result = _execute(x, f)
         if (!result.length) return s
 
         s = pushIfAppropriate(s, result, (addPathToErrors || null) && (e => ({
@@ -110,7 +128,7 @@ export type AnyOfCondition = Readonly<{
 function anyOf(schemaCondition: AnyOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
     let errs: SchemaError[] | null = null
     for (let i = 0; i < schemaCondition.conditions.length; i++) {
-        const result = execute(schemaCondition.conditions[i], f)
+        const result = _execute(schemaCondition.conditions[i], f)
         if (!result.length) return result
 
         errs = pushIfAppropriate(errs, result, e => ({
@@ -134,7 +152,7 @@ const oneOfString = "oneOf"
 const oneOfStrings: readonly string[] = [oneOfString]
 function oneOf(schemaCondition: OneOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
     const [falseCount, errors] = schemaCondition.conditions.reduce((s, x, i) => {
-        const result = execute(x, f)
+        const result = _execute(x, f)
         if (!result.length) return s
         
         s[0] += 1
@@ -164,7 +182,7 @@ export type NotCondition = Readonly<{
 }>
 const notStrings: readonly string[] = ["not"]
 function not(schemaCondition: NotCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
-    const result = execute(schemaCondition.condition, f)
+    const result = _execute(schemaCondition.condition, f)
     return result.length && emptyReadOnlyList || [{
         fieldPath: emptyStrings,
         schemaPath: notStrings,
@@ -174,7 +192,6 @@ function not(schemaCondition: NotCondition, f: (x: TypedSchema) => readonly Sche
 
 export type Leaf = Readonly<{
     $type: "leaf"
-    path: readonly string[]
     schema: ConcreteSchema
 }>
 
@@ -191,17 +208,48 @@ export type SchemaCondition =
     | OneOfCondition
     | NotCondition
     | RootCondition
+    | RefCondition
 
-function prependSchemaPath(errors: readonly SchemaError[], schemaPath: readonly string[]): readonly SchemaError[] {
-    if (!errors.length || !schemaPath.length) return errors
+function prependSchemaPath(errors: readonly SchemaError[], schemaPath: readonly string[] | string): readonly SchemaError[] {
+    if (typeof schemaPath !== "string" && !errors.length || !schemaPath.length) return errors
 
-    return errors.map(x => ({
-        ...x,
-        schemaPath: [...schemaPath, ...x.schemaPath]
-    }))
+    return errors.map(typeof schemaPath === "string"
+        ? (x => ({
+            ...x,
+            schemaPath: [schemaPath, ...x.schemaPath]
+        }))
+        : (x => ({
+            ...x,
+            schemaPath: [...schemaPath, ...x.schemaPath]
+        })))
 }
 
 export function execute(
+    context: ValidationContext, 
+    schema: Schema,
+    f?: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[];
+export function execute(
+    schemaCondition: SchemaCondition,
+    f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[];
+export function execute(
+    schemaConditionOrContext: any,
+    schemaOrF: any,
+    f?: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
+
+    let schemaCondition: SchemaCondition
+    if (f != null) {
+        schemaCondition = build(schemaConditionOrContext, schemaOrF)
+    } else if (arguments.length === 2) {
+        schemaCondition = schemaConditionOrContext
+        f = schemaOrF as NonNullable<typeof f>
+    } else {
+        throw new Error("Invalid arguments")
+    }
+
+    return _execute(schemaCondition, f)
+}
+
+function _execute(
     schemaCondition: SchemaCondition,
     f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
 
@@ -225,7 +273,11 @@ export function execute(
         return root(schemaCondition, f)
     }
 
-    return prependSchemaPath(f(schemaCondition.schema), schemaCondition.path)
+    if (schemaCondition.$type === "ref") {
+        return ref(schemaCondition, f)
+    }
+
+    return f(schemaCondition.schema)
 }
 
 // const dynamicRefStrings: readonly string[] = ["$dynamicRef"]
@@ -241,44 +293,44 @@ function pushCondition(conditions: SchemaCondition | SchemaCondition[], conditio
     return conditions
 }
 
-function _build(context: ValidationContext, schema: Schema, path: readonly string[], refPath: readonly RefPath[]): SchemaCondition {
-    if (typeof schema === "boolean") return {$type: "leaf", path, schema: schema}
+function _build(context: ValidationContext, schema: Schema, refPath: readonly RefPath[]): SchemaCondition {
+    if (typeof schema === "boolean") return {$type: "leaf", schema: schema}
 
-    let topLevel: SchemaCondition | SchemaCondition[] = { $type: "leaf", path, schema }
+    let topLevel: SchemaCondition | SchemaCondition[] = { $type: "leaf", schema }
 
     if (schema.$ref) {
-        topLevel = pushCondition(topLevel, resolveRef(context, schema.$ref, "ref", path, refPath))
+        topLevel = pushCondition(topLevel, resolveRef(context, schema.$ref, "ref", refPath))
     }
 
     if (schema.$dynamicRef) {
-        topLevel = pushCondition(topLevel, resolveRef(context, schema.$dynamicRef, "dynamicRef", path, refPath))
+        topLevel = pushCondition(topLevel, resolveRef(context, schema.$dynamicRef, "dynamicRef", refPath))
     }
 
     if (schema.allOf && schema.allOf.length) {
         topLevel = pushCondition(topLevel, {
             $type: "allOf",
-            conditions: schema.allOf.map(x => _build(context, x, path, refPath))
+            conditions: schema.allOf.map(x => _build(context, x, refPath))
         })
     }
 
     if (schema.anyOf) {
         topLevel = pushCondition(topLevel, {
             $type: "anyOf",
-            conditions: schema.anyOf.map(x => _build(context, x, path, refPath))
+            conditions: schema.anyOf.map(x => _build(context, x, refPath))
         })
     }
 
     if (schema.oneOf) {
         topLevel = pushCondition(topLevel, {
             $type: "oneOf",
-            conditions: schema.oneOf.map(x => _build(context, x, path, refPath))
+            conditions: schema.oneOf.map(x => _build(context, x, refPath))
         })
     }
 
     if (schema.not) {
         topLevel = pushCondition(topLevel, {
             $type: "not",
-            condition: _build(context, schema.not, path, refPath)
+            condition: _build(context, schema.not, refPath)
         })
     }
 
@@ -293,6 +345,6 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 }
 
 export function build(context: ValidationContext, schema: Schema): SchemaCondition {
-    return _build(context, schema, emptyStrings, emptyRefPaths)
+    return _build(context, schema, emptyRefPaths)
 }
 
