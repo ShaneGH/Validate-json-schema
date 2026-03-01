@@ -278,7 +278,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
     if (schema.not) {
         topLevel = pushCondition(topLevel, {
             $type: "not",
-            condition: _build(context, schema.not, notStrings, refPath)
+            condition: _build(context, schema.not, path, refPath)
         })
     }
 
