@@ -87,19 +87,22 @@ function allOf(schemaCondition: AllOfCondition, f: (x: TypedSchema) => readonly 
     }, null as SchemaError[] | null) || emptyReadOnlyList
 }
 
-const anyOfStrings: readonly string[] = ["anyOf"]
+const anyOfString = "anyOf"
+const anyOfStrings: readonly string[] = [anyOfString]
 export type AnyOfCondition = Readonly<{
     $type: "anyOf"
     conditions: readonly SchemaCondition[]
 }>
 function anyOf(schemaCondition: AnyOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
     let errs: SchemaError[] | null = null
-    for (let x of schemaCondition.conditions) {
-        const result = execute(x, f)
+    for (let i = 0; i < schemaCondition.conditions.length; i++) {
+        const result = execute(schemaCondition.conditions[i], f)
         if (!result.length) return result
 
-        errs = errs || []
-        errs.push(...result)
+        errs = pushIfAppropriate(errs, result, e => ({
+            ...e,
+            schemaPath: [anyOfString, i.toString(), ...e.schemaPath]
+        }))
     }
     
     return errs || [{
@@ -141,11 +144,11 @@ function oneOf(schemaCondition: OneOfCondition, f: (x: TypedSchema) => readonly 
     ]
 }
 
-const notStrings: readonly string[] = ["not"]
 export type NotCondition = Readonly<{
     $type: "not"
     condition: SchemaCondition
 }>
+const notStrings: readonly string[] = ["not"]
 function not(schemaCondition: NotCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
     const result = execute(schemaCondition.condition, f)
     return result.length && emptyReadOnlyList || [{
@@ -239,7 +242,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
         topLevel.push({
             $type: "anyOf",
-            conditions: schema.anyOf.map((x, i) => _build(context, x, [...path, "anyOf", i.toString()], refPath))
+            conditions: schema.anyOf.map(x => _build(context, x, path, refPath))
         })
     }
 
@@ -248,7 +251,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
         topLevel.push({
             $type: "oneOf",
-            conditions: schema.oneOf.map((x, i) => _build(context, x, path, refPath))
+            conditions: schema.oneOf.map(x => _build(context, x, path, refPath))
         })
     }
 
