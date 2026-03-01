@@ -91,6 +91,7 @@ function allOf(schemaCondition: AllOfCondition, f: (x: TypedSchema) => readonly 
     }, null as SchemaError[] | null) || emptyReadOnlyList
 }
 
+const anyOfStrings: readonly string[] = ["anyOf"]
 export type AnyOfCondition = Readonly<{
     $type: "anyOf"
     conditions: readonly SchemaCondition[]
@@ -107,7 +108,7 @@ function anyOf(schemaCondition: AnyOfCondition, f: (x: TypedSchema) => readonly 
     
     return errs || [{
         fieldPath: emptyStrings,
-        schemaPath: cachedPaths.anyOf,
+        schemaPath: anyOfStrings,
         message: "No schemas match in anyOf condition"
     }]
 }
@@ -116,6 +117,7 @@ export type OneOfCondition = Readonly<{
     $type: "oneOf"
     conditions: readonly SchemaCondition[]
 }>
+const oneOfStrings: readonly string[] = ["oneOf"]
 function oneOf(schemaCondition: OneOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
     const [falseCount, errors] = schemaCondition.conditions.reduce((s, x) => {
         const result = execute(x, f)
@@ -133,13 +135,14 @@ function oneOf(schemaCondition: OneOfCondition, f: (x: TypedSchema) => readonly 
 
     return [{
             fieldPath: emptyStrings,
-            schemaPath: cachedPaths.oneOf,
+            schemaPath: oneOfStrings,
             message: `Incorrect schema matches in oneOf condition: matched ${trueCount}, not matched ${falseCount}`
         },
         ...(errors || emptyReadOnlyList)
     ]
 }
 
+const notStrings: readonly string[] = ["not"]
 export type NotCondition = Readonly<{
     $type: "not"
     condition: SchemaCondition
@@ -148,7 +151,7 @@ function not(schemaCondition: NotCondition, f: (x: TypedSchema) => readonly Sche
     const result = execute(schemaCondition.condition, f)
     return result.length && emptyReadOnlyList || [{
         fieldPath: emptyStrings,
-        schemaPath: cachedPaths.not,
+        schemaPath: notStrings,
         message: "Schema matches in not condition"
     }]
 }
@@ -204,20 +207,14 @@ export function execute(
     return prependSchemaPath(f(schemaCondition.schema), schemaCondition.path)
 }
 
-const cachedPaths: Readonly<Record<SchemaPath, readonly SchemaPath[]>> = {
-    "$dynamicRef": ["$dynamicRef"],
-    "$ref": ["$ref"],
-    "oneOf": ["oneOf"],
-    "allOf": ["allOf"],
-    "anyOf": ["anyOf"],
-    "not": ["not"]
-}
+// /** Use quick pool of single paths -or- build a new path */
+// function appendPath(path: readonly string[], next: SchemaPath): readonly string[] {
+//     return (!path.length && cachedPaths[next]) || [...path, next]
+// }
 
-/** Use quick pool of single paths -or- build a new path */
-function appendPath(path: readonly string[], next: SchemaPath): readonly string[] {
-    return (!path.length && cachedPaths[next]) || [...path, next]
-}
-
+// const dynamicRefStrings: readonly string[] = ["$dynamicRef"]
+// const refStrings: readonly string[] = ["$ref"]
+// const allOfStrings: readonly string[] = ["allOf"]
 function _build(context: ValidationContext, schema: Schema, path: readonly string[], refPath: readonly RefPath[]): SchemaCondition {
     if (typeof schema === "boolean") return {$type: "leaf", path, schema: schema}
 
@@ -235,7 +232,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
     if (schema.allOf && schema.allOf.length) {
         if (!Array.isArray(topLevel)) topLevel = [topLevel]
-        topLevel.push(...schema.allOf.map((x, i) => _build(context, x, concat2(path, ["allOf", i.toString()]), refPath)))
+        topLevel.push(...schema.allOf.map((x, i) => _build(context, x, [...path, "allOf", i.toString()], refPath)))
     }
 
     if (schema.anyOf) {
@@ -243,7 +240,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
         topLevel.push({
             $type: "anyOf",
-            conditions: schema.anyOf.map((x, i) => _build(context, x, [...appendPath(path, "anyOf"), i.toString()], refPath))
+            conditions: schema.anyOf.map((x, i) => _build(context, x, [...path, "anyOf", i.toString()], refPath))
         })
     }
 
@@ -252,17 +249,16 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
         topLevel.push({
             $type: "oneOf",
-            conditions: schema.oneOf.map((x, i) => _build(context, x, [...appendPath(path, "oneOf"), i.toString()], refPath))
+            conditions: schema.oneOf.map((x, i) => _build(context, x, [...path, "oneOf", i.toString()], refPath))
         })
     }
 
     if (schema.not) {
         if (!Array.isArray(topLevel)) topLevel = [topLevel]
 
-        const notPath = appendPath(path, "not")
         topLevel.push({
             $type: "not",
-            condition: _build(context, schema.not, appendPath(notPath, "not"), refPath)
+            condition: _build(context, schema.not, notStrings, refPath)
         })
     }
 

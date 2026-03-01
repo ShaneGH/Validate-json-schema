@@ -17,9 +17,9 @@ export function pushIfAppropriate<T>(
     if (errors == null) return accumulator
 
     if (!Array.isArray(errors)) {
-        errors = errors as T[]
+        const nonArrayErr = errors as any   // typescipt having difficulties here
         accumulator = accumulator || []
-        accumulator.push(...(f && errors.map(f) || errors))
+        accumulator.push(f && f(nonArrayErr) || nonArrayErr)
         return accumulator
     }
 
