@@ -16,45 +16,16 @@ import {
     TypedSchema } from "./jsonSchema.js"
 import { build as buildValidationContext, ValidationContext } from "./validationContext.js"
 import { build as buildSchemaCondition, SchemaError, execute, SchemaCondition } from "./schemaConditions.js"
+import {
+    tpl,
+    logAnd,
+    pushIfAppropriate,
+    concat2,
+    hasAtLeastOneProp
+} from "./utils.js"
 
-
-function tpl<T1, T2>(x: T1, y: T2): [T1, T2] {
-    return [x, y]
-}
-
-function isReadOnlyArray<T, U>(xs: readonly T[] | (U extends any[] ? never : U)): xs is readonly T[] {
-    return Array.isArray(xs)
-}
-
-/** Adds errors to a mutable accumulator and returns it */
-function pushErrors(
-    accumulator: SchemaError[] | null, 
-    errors: SchemaError | readonly SchemaError[] | null,
-    f?: (e: SchemaError) => SchemaError): SchemaError[] | null {
-
-    if (errors === null) return accumulator
-
-    if (!isReadOnlyArray(errors)) {
-        accumulator = accumulator || []
-        accumulator.push(f && f(errors) || errors)
-        return accumulator
-    }
-
-    if (!errors.length) return accumulator
-    accumulator = accumulator || []
-    for (let err of errors)
-        accumulator.push(f && f(err) || err)
-
-    return accumulator
-}
-
-/** Adds errors to a mutable accumulator and returns it */
-function concat2<T>(xs: readonly T[], ys: readonly T[]): readonly T[] {
-    if (!xs.length) return ys
-    if (!ys.length) return xs
-
-    return [...xs, ...ys]
-}
+const emptyStrings: readonly string[] = []
+const emptyErrors: readonly SchemaError[] = []
 
 function checkType(type: SchemaType, data: any) {
     switch (type) {
@@ -180,16 +151,6 @@ function *propertySchemas(schema: ObjectSchema, property: string) {
     }
 }
 
-function hasAtLeastOneProp<T>(object: NonNullable<T>, props: readonly (keyof T)[]) {
-    for (let prop of props) {
-        if (object.hasOwnProperty(prop)) return true
-    }
-
-    return false
-}
-
-const emptyStrings: readonly string[] = []
-const emptyErrors: readonly SchemaError[] = []
 const containsError: SchemaError = {
     fieldPath: emptyStrings,
     schemaPath: ["contains"],
@@ -205,7 +166,7 @@ function validateObjectSchema(context: ValidationContext, schema: ObjectSchema, 
     for (let req of schema.required || emptyStrings) {
         if (data[req] != null) continue
 
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: "###Err_m1",
             fieldPath: [req],
             schemaPath: ["required", req]
@@ -231,7 +192,7 @@ function validateObjectSchema(context: ValidationContext, schema: ObjectSchema, 
                 cachedSchemaCondition = patternPropertiesCache[sch[0][1]]
             }
 
-            errs = pushErrors(
+            errs = pushIfAppropriate(
                 errs, 
                 validateSchema(
                     context, 
@@ -268,7 +229,7 @@ function validateArraySchema(context: ValidationContext, schema: ArraySchema, da
         if (!itemSchema && !contains) break
 
         if (itemSchema) {
-            errs = pushErrors(
+            errs = pushIfAppropriate(
                 errs, 
                 validateSchema(context, itemSchema, data[i]), 
                 e => ({
@@ -286,7 +247,7 @@ function validateArraySchema(context: ValidationContext, schema: ArraySchema, da
     }
 
     if (contains) {
-        errs = pushErrors(errs, containsErrors)
+        errs = pushIfAppropriate(errs, containsErrors)
     }
 
     return errs || emptyErrors
@@ -300,7 +261,7 @@ function validateStringSchema(context: ValidationContext, schema: StringSchema, 
 
     let errs: SchemaError[] | null = null
     if (schema.maxLength != null && data.length > schema.maxLength) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `String max length ${schema.maxLength}`,
             schemaPath: maxLengthString,
             fieldPath: emptyStrings
@@ -308,15 +269,16 @@ function validateStringSchema(context: ValidationContext, schema: StringSchema, 
     }
 
     if (schema.minLength != null && data < schema.minLength) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `String min length ${schema.minLength}`,
             schemaPath: minLengthString,
             fieldPath: emptyStrings
         });
     }
 
+    // todo: regex cache
     if (schema.pattern != null && !new RegExp(schema.pattern).test(data)) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `String pattern does not match: ${schema.pattern}`,
             schemaPath: patternString,
             fieldPath: emptyStrings
@@ -336,7 +298,7 @@ function validateNumericSchema(context: ValidationContext, schema: NumericSchema
 
     let errs: SchemaError[] | null = null
     if (schema.exclusiveMaximum != null && data >= schema.exclusiveMaximum) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `Numeric exclusive maximum ${schema.exclusiveMaximum}`,
             schemaPath: exclusiveMaximumString,
             fieldPath: emptyStrings
@@ -344,7 +306,7 @@ function validateNumericSchema(context: ValidationContext, schema: NumericSchema
     }
 
     if (schema.maximum != null && data > schema.maximum) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `Numeric maximum ${schema.maximum}`,
             schemaPath: maximumString,
             fieldPath: emptyStrings
@@ -352,7 +314,7 @@ function validateNumericSchema(context: ValidationContext, schema: NumericSchema
     }
 
     if (schema.exclusiveMinimum != null && data <= schema.exclusiveMinimum) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `Numeric exclusive minimum ${schema.exclusiveMinimum}`,
             schemaPath: exclusiveMinimumString,
             fieldPath: emptyStrings
@@ -360,7 +322,7 @@ function validateNumericSchema(context: ValidationContext, schema: NumericSchema
     }
 
     if (schema.minimum != null && data < schema.minimum) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `Numeric minimum ${schema.minimum}`,
             schemaPath: minimumString,
             fieldPath: emptyStrings
@@ -368,7 +330,7 @@ function validateNumericSchema(context: ValidationContext, schema: NumericSchema
     }
 
     if (schema.multipleOf != null && data % schema.multipleOf !== 0) {
-        errs = pushErrors(errs, {
+        errs = pushIfAppropriate(errs, {
             message: `Numeric multiple of ${schema.multipleOf}`,
             schemaPath: multipleOfString,
             fieldPath: emptyStrings
@@ -409,12 +371,7 @@ function validateConcreteSchema(context: ValidationContext, schema: TypedSchema,
     if (schema === false) return noPathFailAllErrors
 
     return validators
-        .reduce((s, f) => pushErrors(s, f(context, schema, data)), null as null | SchemaError[]) || emptyErrors
-}
-
-function logAnd<T>(x: T, ...msg: any[]) {
-    console.log(x, ...msg)
-    return x
+        .reduce((s, f) => pushIfAppropriate(s, f(context, schema, data)), null as null | SchemaError[]) || emptyErrors
 }
 
 function validateSchema(context: ValidationContext, schema: SchemaCondition, data: any): readonly SchemaError[] {

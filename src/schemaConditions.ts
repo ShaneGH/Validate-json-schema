@@ -1,11 +1,14 @@
 import { Schema, ConcreteSchema, TypedSchema } from "./jsonSchema"
 import { ValidationContext } from "./validationContext"
+import {
+    tpl,
+    logAnd,
+    concat2
+} from "./utils.js"
 
 const emptyReadOnlyList: readonly any[] = []
-
-function tpl<T1, T2>(x: T1, y: T2): [T1, T2] {
-    return [x, y]
-}
+const emptyRefPaths: readonly RefPath[] = []
+const emptyStrings: readonly string[] = []
 
 type RefPath = Readonly<{
     type: "ref" | "dynamicRef",
@@ -19,9 +22,6 @@ type SchemaPath =
     | "allOf"
     | "oneOf"
     | "not"
-
-const emptyRefPaths: readonly RefPath[] = []
-const emptyStrings: readonly string[] = []
 
 function resolveRef(
     context: ValidationContext, 
@@ -216,17 +216,6 @@ const cachedPaths: Readonly<Record<SchemaPath, readonly SchemaPath[]>> = {
 /** Use quick pool of single paths -or- build a new path */
 function appendPath(path: readonly string[], next: SchemaPath): readonly string[] {
     return (!path.length && cachedPaths[next]) || [...path, next]
-}
-
-function concat2<T>(xs: readonly T[], ys: readonly T[]): readonly T[] {
-    if (!xs.length) return ys
-    if (!ys.length) return xs
-    return [...xs, ...ys]
-}
-
-function logAnd<T>(x: T, ...msg: any[]) {
-    console.log(...msg)
-    return x
 }
 
 function _build(context: ValidationContext, schema: Schema, path: readonly string[], refPath: readonly RefPath[]): SchemaCondition {
