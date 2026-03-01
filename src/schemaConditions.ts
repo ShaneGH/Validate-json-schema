@@ -144,12 +144,12 @@ function anyOf(schemaCondition: AnyOfCondition, f: ExecuteFunction): readonly Sc
     }]
 }
 
+const oneOfString = "oneOf"
+const oneOfStrings: readonly string[] = [oneOfString]
 export type OneOfCondition = Readonly<{
     $type: "oneOf"
     conditions: readonly SchemaCondition[]
 }>
-const oneOfString = "oneOf"
-const oneOfStrings: readonly string[] = [oneOfString]
 function oneOf(schemaCondition: OneOfCondition, f: ExecuteFunction): readonly SchemaError[] {
     const [falseCount, errors] = schemaCondition.conditions.reduce((s, x, i) => {
         const result = execute(x, f)
@@ -176,11 +176,11 @@ function oneOf(schemaCondition: OneOfCondition, f: ExecuteFunction): readonly Sc
     ]
 }
 
+const notStrings: readonly string[] = ["not"]
 export type NotCondition = Readonly<{
     $type: "not"
     condition: SchemaCondition
 }>
-const notStrings: readonly string[] = ["not"]
 function not(schemaCondition: NotCondition, f: ExecuteFunction): readonly SchemaError[] {
     const result = execute(schemaCondition.condition, f)
     return result.length && emptyReadOnlyList || [{
@@ -233,36 +233,16 @@ export function execute(
     schemaCondition: SchemaCondition,
     f: ExecuteFunction): readonly SchemaError[] {
 
-    if (schemaCondition.$type === "anyOf") {
-        return anyOf(schemaCondition, f)
+    switch (schemaCondition.$type) {
+        case "anyOf": return anyOf(schemaCondition, f)
+        case "allOf": return allOf(schemaCondition, f)
+        case "oneOf": return oneOf(schemaCondition, f)
+        case "not": return not(schemaCondition, f)
+        case "root": return root(schemaCondition, f)
+        case "ref":return ref(schemaCondition, f)
+        default: return f(schemaCondition.schema)
     }
-
-    if (schemaCondition.$type === "allOf") {
-        return allOf(schemaCondition, f)
-    }
-
-    if (schemaCondition.$type === "oneOf") {
-        return oneOf(schemaCondition, f)
-    }
-
-    if (schemaCondition.$type === "not") {
-        return not(schemaCondition, f)
-    }
-
-    if (schemaCondition.$type === "root") {
-        return root(schemaCondition, f)
-    }
-
-    if (schemaCondition.$type === "ref") {
-        return ref(schemaCondition, f)
-    }
-
-    return f(schemaCondition.schema)
 }
-
-// const dynamicRefStrings: readonly string[] = ["$dynamicRef"]
-// const refStrings: readonly string[] = ["$ref"]
-// const allOfStrings: readonly string[] = ["allOf"]
 
 /** Converts the conditions to an array if required, pushes the new condition and returns
  * the new or old array
