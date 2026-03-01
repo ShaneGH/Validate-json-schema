@@ -13,8 +13,7 @@ import {
     SchemaType, 
     StringSchema, 
     StringSchemaTemplate, 
-    TypedSchema, 
-    Schema} from "./jsonSchema.js"
+    TypedSchema } from "./jsonSchema.js"
 import { build as buildValidationContext, ValidationContext } from "./validationContext.js"
 import { build as buildSchemaCondition, SchemaError, execute, SchemaCondition } from "./schemaConditions.js"
 import {
@@ -193,20 +192,18 @@ function validateObjectSchema(context: ValidationContext, schema: ObjectSchema, 
                 cachedSchemaCondition = patternPropertiesCache[sch[0][1]]
             }
 
-            const result = cachedSchemaCondition && validateSchemaContext(
-                context, 
-                cachedSchemaCondition || buildSchemaCondition(context, sch[1]), 
-                data[property])
-                || validateSchema(
+            errs = pushIfAppropriate(
+                errs, 
+                validateSchema(
                     context, 
-                    sch[1], 
-                    data[property])
-
-            errs = pushIfAppropriate(errs, result, e => ({
-                ...e,
-                schemaPath: concat2(sch[0], e.schemaPath),
-                fieldPath: [property, ...e.fieldPath]
-            }));
+                    cachedSchemaCondition || buildSchemaCondition(context, sch[1]), 
+                    data[property]), 
+                e => ({
+                    ...e,
+                    schemaPath: concat2(sch[0], e.schemaPath),
+                    fieldPath: [property, ...e.fieldPath]
+                })
+            );
         }
     }
 
@@ -226,15 +223,15 @@ function validateArraySchema(context: ValidationContext, schema: ArraySchema, da
     for (let i = 0; i < data.length; i++) {
         
         const itemSchema = schema.prefixItems && i < schema.prefixItems.length
-            ? buildSchemaCondition(context, schema.prefixItems[i])
-            : (items = items || (schema.items && buildSchemaCondition(context, schema.items)))
+        ? buildSchemaCondition(context, schema.prefixItems[i])
+        : (items = items || (schema.items && buildSchemaCondition(context, schema.items)))
 
         if (!itemSchema && !contains) break
 
         if (itemSchema) {
             errs = pushIfAppropriate(
                 errs, 
-                validateSchemaContext(context, itemSchema, data[i]), 
+                validateSchema(context, itemSchema, data[i]), 
                 e => ({
                     ...e,
                     schemaPath: items
@@ -244,7 +241,7 @@ function validateArraySchema(context: ValidationContext, schema: ArraySchema, da
                 }));
         }
 
-        if (contains && validateSchemaContext(context, contains, data[i]).length === 0) {
+        if (contains && validateSchema(context, contains, data[i]).length === 0) {
             contains = null
         }
     }
@@ -377,14 +374,9 @@ function validateConcreteSchema(context: ValidationContext, schema: TypedSchema,
         .reduce((s, f) => pushIfAppropriate(s, f(context, schema, data)), null as null | SchemaError[]) || emptyErrors
 }
 
-function validateSchemaContext(context: ValidationContext, schema: SchemaCondition, data: any): readonly SchemaError[] {
+function validateSchema(context: ValidationContext, schema: SchemaCondition, data: any): readonly SchemaError[] {
 
     return execute(schema, (schema) => validateConcreteSchema(context, schema, data))
-}
-
-function validateSchema(context: ValidationContext, schema: Schema, data: any): readonly SchemaError[] {
-
-    return execute(context, schema, (schema) => validateConcreteSchema(context, schema, data))
 }
 
 export type ValidationError = Readonly<{
@@ -396,7 +388,7 @@ export type ValidationError = Readonly<{
 export function validateDocument(document: JsonDocument, data: any, retreivalUri?: URL): ValidationError[] {
 
     const ctxt = buildValidationContext(document, retreivalUri)
-    return validateSchema(ctxt, document, data)
+    return validateSchema(ctxt, buildSchemaCondition(ctxt, document), data)
         .map(e => ({
             field: e.fieldPath.join("/"),
             schema: `#/${e.schemaPath.join("/")}`,
