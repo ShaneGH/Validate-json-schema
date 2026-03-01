@@ -83,9 +83,9 @@ function resolveRef(
     }
 }
 
-function ref(schemaCondition: RefCondition, f: IExecuteFunction) {
+function ref(schemaCondition: RefCondition, f: ExecuteFunction) {
     return prependSchemaPath(
-        _execute(schemaCondition.condition, f),
+        execute(schemaCondition.condition, f),
         schemaCondition.name)
 }
 
@@ -93,7 +93,7 @@ export type RootCondition = Readonly<{
     $type: "root"
     conditions: readonly SchemaCondition[]
 }>
-function root(schemaCondition: RootCondition, f: IExecuteFunction): readonly SchemaError[] {
+function root(schemaCondition: RootCondition, f: ExecuteFunction): readonly SchemaError[] {
     return _allOf(schemaCondition.conditions, f, false)
 }
 
@@ -101,9 +101,9 @@ export type AllOfCondition = Readonly<{
     $type: "allOf"
     conditions: readonly SchemaCondition[]
 }>
-function _allOf(schemaConditions: readonly SchemaCondition[], f: IExecuteFunction, addPathToErrors = true): readonly SchemaError[] {
+function _allOf(schemaConditions: readonly SchemaCondition[], f: ExecuteFunction, addPathToErrors = true): readonly SchemaError[] {
     return schemaConditions.reduce((s, x, i) => {
-        const result = _execute(x, f)
+        const result = execute(x, f)
         if (!result.length) return s
 
         s = pushIfAppropriate(s, result, (addPathToErrors || null) && (e => ({
@@ -115,7 +115,7 @@ function _allOf(schemaConditions: readonly SchemaCondition[], f: IExecuteFunctio
     }, null as SchemaError[] | null) || emptyReadOnlyList
 }
 
-function allOf(schemaCondition: AllOfCondition, f: IExecuteFunction): readonly SchemaError[] {
+function allOf(schemaCondition: AllOfCondition, f: ExecuteFunction): readonly SchemaError[] {
     return _allOf(schemaCondition.conditions, f, true)
 }
 
@@ -125,10 +125,10 @@ export type AnyOfCondition = Readonly<{
     $type: "anyOf"
     conditions: readonly SchemaCondition[]
 }>
-function anyOf(schemaCondition: AnyOfCondition, f: IExecuteFunction): readonly SchemaError[] {
+function anyOf(schemaCondition: AnyOfCondition, f: ExecuteFunction): readonly SchemaError[] {
     let errs: SchemaError[] | null = null
     for (let i = 0; i < schemaCondition.conditions.length; i++) {
-        const result = _execute(schemaCondition.conditions[i], f)
+        const result = execute(schemaCondition.conditions[i], f)
         if (!result.length) return result
 
         errs = pushIfAppropriate(errs, result, e => ({
@@ -150,9 +150,9 @@ export type OneOfCondition = Readonly<{
 }>
 const oneOfString = "oneOf"
 const oneOfStrings: readonly string[] = [oneOfString]
-function oneOf(schemaCondition: OneOfCondition, f: IExecuteFunction): readonly SchemaError[] {
+function oneOf(schemaCondition: OneOfCondition, f: ExecuteFunction): readonly SchemaError[] {
     const [falseCount, errors] = schemaCondition.conditions.reduce((s, x, i) => {
-        const result = _execute(x, f)
+        const result = execute(x, f)
         if (!result.length) return s
         
         s[0] += 1
@@ -181,8 +181,8 @@ export type NotCondition = Readonly<{
     condition: SchemaCondition
 }>
 const notStrings: readonly string[] = ["not"]
-function not(schemaCondition: NotCondition, f: IExecuteFunction): readonly SchemaError[] {
-    const result = _execute(schemaCondition.condition, f)
+function not(schemaCondition: NotCondition, f: ExecuteFunction): readonly SchemaError[] {
+    const result = execute(schemaCondition.condition, f)
     return result.length && emptyReadOnlyList || [{
         fieldPath: emptyStrings,
         schemaPath: notStrings,
@@ -227,66 +227,11 @@ function prependSchemaPath(
         })))
 }
 
-// export function execute(
-//     context: ValidationContext, 
-//     schema: Schema,
-//     f?: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[];
-// export function execute(
-//     schemaCondition: SchemaCondition,
-//     f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[];
-// export function execute(
-//     schemaConditionOrContext: any,
-//     schemaOrF: any,
-//     f?: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
-
-//     let schemaCondition: SchemaCondition
-//     if (f != null) {
-//         schemaCondition = build(schemaConditionOrContext, schemaOrF)
-//     } else if (arguments.length === 2) {
-//         schemaCondition = schemaConditionOrContext
-//         f = schemaOrF as NonNullable<typeof f>
-//     } else {
-//         throw new Error("Invalid arguments")
-//     }
-
-//     return _execute(schemaCondition, f)
-// }
-
-type StatefulFn<TState> = (mutableState: TState, x: TypedSchema) => readonly SchemaError[]
-type StatelessFn = (x: TypedSchema) => readonly SchemaError[]
-
-interface IExecuteFunction {
-    execute(x: TypedSchema): readonly SchemaError[]
-}
-
-class ExecuteFunction<TState> implements IExecuteFunction {
-
-    public constructor(private f: Function, private mutableState?: TState) {
-    }
-
-    execute(x: TypedSchema): readonly SchemaError[] {
-        return this.f(x, this.mutableState)
-    }
-}
+type ExecuteFunction = (x: TypedSchema) => readonly SchemaError[]
 
 export function execute(
     schemaCondition: SchemaCondition,
-    f: StatelessFn): readonly SchemaError[];
-export function execute<TState>(
-    schemaCondition: SchemaCondition,
-    f: StatefulFn<TState>,
-    initialState: TState): readonly SchemaError[];
-export function execute(
-    schemaCondition: SchemaCondition,
-    f: StatefulFn<any> | StatelessFn,
-    initialState?: any): readonly SchemaError[] {
-
-    return _execute(schemaCondition, new ExecuteFunction<any>(f, initialState))
-}
-
-function _execute(
-    schemaCondition: SchemaCondition,
-    f: IExecuteFunction): readonly SchemaError[] {
+    f: ExecuteFunction): readonly SchemaError[] {
 
     if (schemaCondition.$type === "anyOf") {
         return anyOf(schemaCondition, f)
@@ -312,7 +257,7 @@ function _execute(
         return ref(schemaCondition, f)
     }
 
-    return f.execute(schemaCondition.schema)
+    return f(schemaCondition.schema)
 }
 
 // const dynamicRefStrings: readonly string[] = ["$dynamicRef"]
