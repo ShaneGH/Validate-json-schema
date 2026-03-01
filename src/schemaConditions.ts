@@ -1,6 +1,6 @@
 import { Schema, ConcreteSchema, TypedSchema } from "./jsonSchema"
 import { ValidationContext } from "./validationContext"
-import { tpl, logAnd, dirAnd } from "./utils.js"
+import { tpl, logAnd, dirAnd, pushIfAppropriate } from "./utils.js"
 
 const emptyReadOnlyList: readonly any[] = []
 const emptyRefPaths: readonly RefPath[] = []
@@ -116,18 +116,15 @@ export type OneOfCondition = Readonly<{
 const oneOfString = "oneOf"
 const oneOfStrings: readonly string[] = [oneOfString]
 function oneOf(schemaCondition: OneOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
-    const [falseCount, errors] = schemaCondition.conditions.reduce((s, x) => {
+    const [falseCount, errors] = schemaCondition.conditions.reduce((s, x, i) => {
         const result = execute(x, f)
         if (!result.length) return s
         
         s[0] += 1
-        s[1] = s[1] || []
-        for (let i = 0; i < result.length; i++) {
-            s[1].push({
-                ...result[i],
-                schemaPath: [oneOfString, i.toString(), ...result[i].schemaPath]
-            })
-        }
+        s[1] = pushIfAppropriate(s[1], result, e => ({
+            ...e,
+            schemaPath: [oneOfString, i.toString(), ...e.schemaPath]
+        }))
 
         return s
     }, tpl(0, null as SchemaError[] | null))
