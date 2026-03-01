@@ -31,19 +31,21 @@ export type Const = Readonly<Partial<{
     const: any
 }>>
 
-export const ObjectSchemaTemplate = ["properties", "additionalProperties", "patternProperties", "required"] as const
+export const ObjectSchemaTemplate = ["properties", "additionalProperties", "patternProperties", "required", "unevaluatedProperties"] as const
 export type ObjectSchema = Readonly<Partial<Pick<{
     "properties": Record<string, Schema>,
     "additionalProperties": Schema,
+    "unevaluatedProperties": Schema,
     "patternProperties": Record<string, Schema>,
     "required": readonly string[]
 }, typeof ObjectSchemaTemplate[number]>>>
 
-export const ArraySchemaTemplate = ["items", "prefixItems", "contains"] as const
+export const ArraySchemaTemplate = ["items", "prefixItems", "contains", "unevaluatedItems"] as const
 export type ArraySchema = Readonly<Partial<Pick<{
     "items": Schema
     "prefixItems": readonly Schema[]
-    "contains": Schema
+    "contains": Schema,
+    "unevaluatedItems": Schema,
 }, typeof ArraySchemaTemplate[number]>>>
 
 export const StringSchemaTemplate = ["maxLength", "minLength", "pattern"] as const

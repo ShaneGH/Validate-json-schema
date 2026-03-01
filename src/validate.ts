@@ -13,7 +13,8 @@ import {
     SchemaType, 
     StringSchema, 
     StringSchemaTemplate, 
-    TypedSchema } from "./jsonSchema.js"
+    TypedSchema, 
+    Schema} from "./jsonSchema.js"
 import { build as buildValidationContext, ValidationContext } from "./validationContext.js"
 import { build as buildSchemaCondition, SchemaError, execute, SchemaCondition } from "./schemaConditions.js"
 import {
@@ -26,6 +27,126 @@ import {
 
 const emptyStrings: readonly string[] = []
 const emptyErrors: readonly SchemaError[] = []
+
+type NullableIndexRange = {
+    from: number
+    to: number
+}
+
+function deconstruct(range: number | NullableIndexRange) {
+    return typeof range === "number" || typeof range === "bigint"
+        ? [range, range + 1]
+        : [range.from, range.to]
+}
+
+/**
+ * Returns
+ *  0 if the number is in the range
+ *  Otherwise, how far outside the range it is. 
+ *      Negative numbers are before the range
+ */
+function compare(x: number, range: number | NullableIndexRange) {
+    if (typeof range === "number" || typeof range === "bigint") {
+        return x - range
+    }
+
+    if (range.from > x) return x - range.from
+    if (range.to <= x) return x - range.to + 1
+    return 0
+}
+
+/** NO ERROR CHECKING */
+function newUpperLimit(x: number, range: number | NullableIndexRange): NullableIndexRange {
+    return {
+        from: typeof range === "number" || typeof range === "bigint" ? range : range.from,
+        to: x + 1
+    }
+}
+
+/** NO ERROR CHECKING */
+function newLowerLimit(x: number, range: number | NullableIndexRange): NullableIndexRange {
+    return {
+        from: x,
+        to: typeof range === "number" || typeof range === "bigint" ? range + 1 : range.to,
+    }
+}
+
+type MutableValidationState = {
+    visitedProperties?: {
+        visited: Record<string, true>,
+        unevaluated?: Schema[]
+    },
+    visitedItems?: {
+        visited: (number | NullableIndexRange)[],
+        unevaluated?: Schema[]
+    }
+}
+
+/** Returns true if inserted, false if it is already in the list */
+function addToRange(haystack: (number | NullableIndexRange)[], needle: number): boolean {
+    
+    if (!haystack.length) {
+        haystack.push(needle)
+        return true
+    }
+
+    const cmp = compare(needle, haystack[haystack.length - 1])
+    if (cmp === 1) {
+        haystack[haystack.length - 1] = newUpperLimit(needle, haystack[haystack.length - 1])
+        return true
+    }
+
+    if (cmp === 0) return false
+
+    if (cmp === -1) {
+        haystack[haystack.length - 1] = newLowerLimit(needle, haystack[haystack.length - 1])
+        return true
+    }
+
+    let result = _addToRange(haystack, needle, 0, haystack.length)
+    if (typeof result === "boolean") return result
+
+    result = Math.min(result, haystack.length - 1)
+    while (result > 0 && compare(needle, haystack[result]) > 0) result--
+    while (result < haystack.length && compare(needle, haystack[result]) < 0) result--
+    haystack.splice(result, 0, needle)
+    return true
+}
+
+function _addToRange(haystack: (number | NullableIndexRange)[], needle: number, start: number, end: number): boolean | number {
+    
+    if (start >= end || start < 0 || end > haystack.length) return start
+
+    const pivotI = start + Math.floor((end - start) / 2)
+    const pivot = haystack[pivotI]
+
+    const cmp = compare(needle, haystack[haystack.length - 1])
+    if (cmp === 1) {
+        haystack[pivotI] = newUpperLimit(needle, pivot)
+        return true
+    }
+
+    if (cmp === -1) {
+        haystack[pivotI] = newLowerLimit(needle, pivot)
+        return true
+    }
+
+    if (cmp < 0) return _addToRange(haystack, needle, start, pivotI)
+    if (cmp > 0) return _addToRange(haystack, needle, pivotI + 1, end)
+    return false
+}
+
+function advanceRangeCursor(haystack: (number | NullableIndexRange)[], cursor: number, needle: number): "NOT_FOUND" | "EXHAUSTED_CURSOR" | number {
+    
+    for (; cursor < haystack.length; cursor++) {
+        const cmp = compare(needle, haystack[cursor])
+        if (cmp === 0) return cursor
+        if (cmp < 0) return "NOT_FOUND"
+        cursor += 1
+    }
+    
+    return "EXHAUSTED_CURSOR"
+}
 
 function checkType(type: SchemaType, data: any) {
     switch (type) {
@@ -53,7 +174,7 @@ function checkTypes(type: SchemaType | readonly SchemaType[], data: any) {
 }
 
 const typeString: readonly string[] = ["type"]
-function validateType(context: ValidationContext, schema: TypedSchema, data: any): readonly SchemaError[] {
+function validateType(context: ValidationContext, schema: TypedSchema, data: any, validationState: MutableValidationState): readonly SchemaError[] {
 
     return !schema.type || checkTypes(schema.type, data)
         ? emptyErrors
@@ -159,7 +280,7 @@ const containsError: SchemaError = {
 
 const containsErrors: readonly SchemaError[] = [containsError]
 
-function validateObjectSchema(context: ValidationContext, schema: ObjectSchema, data: any): readonly SchemaError[] {
+function validateObjectSchema(context: ValidationContext, schema: ObjectSchema, data: any, validationState: MutableValidationState): readonly SchemaError[] {
     if (!checkType("object", data) || !hasAtLeastOneProp(schema, ObjectSchemaTemplate)) return emptyErrors
     
     let errs: SchemaError[] | null = null
@@ -173,10 +294,24 @@ function validateObjectSchema(context: ValidationContext, schema: ObjectSchema, 
         })
     }
 
+    const firstIteration = !validationState.visitedProperties
+    if (!validationState.visitedProperties) {
+        validationState.visitedProperties = {visited: {}}
+    }
+
+    if (schema.unevaluatedProperties) {
+        validationState.visitedProperties.unevaluated = 
+            validationState.visitedProperties.unevaluated || []
+
+        validationState.visitedProperties.unevaluated.push(schema.unevaluatedProperties)
+    }
+
     let patternPropertiesCache: Record<string, SchemaCondition> | null = null
     let additionalPropertiesCache: SchemaCondition | null = null
     for (let property in data) {
         for (let sch of propertySchemas(schema, property)) {
+
+            validationState.visitedProperties.visited[property] = true
 
             let cachedSchemaCondition: SchemaCondition | null = null;
             if (sch[0][0] === "additionalProperties") {
@@ -210,11 +345,45 @@ function validateObjectSchema(context: ValidationContext, schema: ObjectSchema, 
     return errs || emptyErrors
 }
 
-function validateArraySchema(context: ValidationContext, schema: ArraySchema, data: any): readonly SchemaError[] {
+function completeObjectValidationState(context: ValidationContext, data: any, validationState: MutableValidationState): readonly SchemaError[] {
+    if (!validationState.visitedProperties || !checkType("object", data)) return emptyErrors
+    if (!validationState.visitedProperties.unevaluated?.length) return emptyErrors
+
+    var unevaluated: SchemaCondition[] | null = null
+    var errs: SchemaError[] | null = null
+    for (let property in data) {
+        if (validationState.visitedProperties.visited[property]) continue
+
+        unevaluated = unevaluated || validationState.visitedProperties.unevaluated
+            .map(s => buildSchemaCondition(context, s))
+
+        errs = unevaluated.reduce((err, c) => 
+            pushIfAppropriate(
+                err, 
+                validateSchema(context, c, data[property]), e => ({
+                    ...e,
+                    // TODO: schema path is not correct 
+                    // if unevaluatedProperties is in a sub schema
+                    schemaPath: ["unevaluatedProperties", ...e.fieldPath]
+                })), errs as SchemaError[] | null)
+    }
+    
+    return errs || emptyErrors
+}
+
+function validateArraySchema(context: ValidationContext, schema: ArraySchema, data: any, validationState: MutableValidationState): readonly SchemaError[] {
     if (!checkType("array", data) || !hasAtLeastOneProp(schema, ArraySchemaTemplate)) return emptyErrors
 
-    if (!schema.contains && !data.length) return emptyErrors
-    if (schema.contains && !data.length) return containsErrors
+    if (!data.length) return schema.contains ? containsErrors : emptyErrors
+
+    validationState.visitedItems = validationState.visitedItems || {
+        visited: []
+    }
+
+    if (schema.unevaluatedItems) {
+        validationState.visitedItems.unevaluated = validationState.visitedItems.unevaluated || []
+        validationState.visitedItems.unevaluated.push(schema.unevaluatedItems)
+    }
 
     let contains = schema.contains && buildSchemaCondition(context, schema.contains) || null
     let items: SchemaCondition | null | undefined = null
@@ -223,8 +392,8 @@ function validateArraySchema(context: ValidationContext, schema: ArraySchema, da
     for (let i = 0; i < data.length; i++) {
         
         const itemSchema = schema.prefixItems && i < schema.prefixItems.length
-        ? buildSchemaCondition(context, schema.prefixItems[i])
-        : (items = items || (schema.items && buildSchemaCondition(context, schema.items)))
+            ? buildSchemaCondition(context, schema.prefixItems[i])
+            : (items = items || (schema.items && buildSchemaCondition(context, schema.items)))
 
         if (!itemSchema && !contains) break
 
@@ -239,6 +408,8 @@ function validateArraySchema(context: ValidationContext, schema: ArraySchema, da
                         : ["prefixItems", i.toString(), ...e.schemaPath],
                     fieldPath: [i.toString(), ...e.fieldPath]
                 }));
+
+            addToRange(validationState.visitedItems.visited, i)
         }
 
         if (contains && validateSchema(context, contains, data[i]).length === 0) {
@@ -251,6 +422,44 @@ function validateArraySchema(context: ValidationContext, schema: ArraySchema, da
     }
 
     return errs || emptyErrors
+}
+
+function completeArrayValidationState(context: ValidationContext, data: any, validationState: MutableValidationState): readonly SchemaError[] {
+    if (!validationState.visitedItems || !checkType("array", data)) return emptyErrors
+    if (!validationState.visitedItems.unevaluated?.length) return emptyErrors
+    if (!data.length) return emptyErrors
+
+    const reduceState = {
+        visited: validationState.visitedItems.visited,
+        unevaluatedSchemas: validationState.visitedItems.unevaluated,
+        rangeCursor: 0 as number | "EXHAUSTED_CURSOR",
+        unevaluatedConditions: null as SchemaCondition[] | null,
+        errs: null as SchemaError[] | null
+    }
+
+    return (data as {}[]).reduce<typeof reduceState>((s, x, i) => {
+        
+        if (s.rangeCursor !== "EXHAUSTED_CURSOR") {
+            const adv = advanceRangeCursor(s.visited, s.rangeCursor, i)
+            if (adv !== "NOT_FOUND") s.rangeCursor = adv
+
+            if (typeof adv === "number") return s
+        }
+
+        s.errs = (s.unevaluatedConditions = s.unevaluatedConditions || s.unevaluatedSchemas
+            .map(s => buildSchemaCondition(context, s)))
+            .reduce((err, c) => 
+                pushIfAppropriate(
+                    err, 
+                    validateSchema(context, c, x), e => ({
+                        ...e,
+                        // TODO: schema path is not correct 
+                        // if unevaluatedItems is in a sub schema
+                        schemaPath: ["unevaluatedItems", ...e.fieldPath]
+                    })), s.errs)
+
+        return s
+    }, reduceState).errs || emptyErrors
 }
 
 const maxLengthString: readonly string[] = ["maxLength"]
@@ -352,6 +561,14 @@ function validateNullSchema(context: ValidationContext, schema: NullSchema, data
     return emptyErrors
 }
 
+function completeValidationState(context: ValidationContext, data: any, validationState: MutableValidationState): readonly SchemaError[] {
+    return pushIfAppropriate(
+        pushIfAppropriate(
+            null, 
+            completeObjectValidationState(context, data, validationState)),
+        completeArrayValidationState(context, data, validationState)) || emptyErrors
+}
+
 const validators: readonly (typeof validateType)[] = [
     validateType,
     validateEnum,
@@ -365,19 +582,27 @@ const validators: readonly (typeof validateType)[] = [
 ]
 
 const noPathFailAllErrors: readonly SchemaError[] = [{fieldPath: [], schemaPath: [], message: "Condition failed"}]
-function validateConcreteSchema(context: ValidationContext, schema: TypedSchema, data: any): readonly SchemaError[] {
+function validateConcreteSchema(context: ValidationContext, schema: TypedSchema, data: any, validationState: NonNullable<any> | null): readonly SchemaError[] {
 
     if (schema === true) return emptyErrors
     if (schema === false) return noPathFailAllErrors
 
     return validators
-        .reduce((s, f) => pushIfAppropriate(s, f(context, schema, data)), null as null | SchemaError[]) || emptyErrors
+        .reduce((s, f) => pushIfAppropriate(s, f(context, schema, data, validationState)), null as null | SchemaError[]) || emptyErrors
 }
 
 function validateSchema(context: ValidationContext, schema: SchemaCondition, data: any): readonly SchemaError[] {
-
-    return execute(schema, (schema) => validateConcreteSchema(context, schema, data))
+    const validationState: MutableValidationState = {}
+    
+    return concat2(
+        execute(schema, (schema) => validateConcreteSchema(context, schema, data, validationState)), 
+        completeValidationState(context, data, validationState))
 }
+
+// function validateStatefulSchema<TState>(
+//     context: ValidationContext, schema: SchemaCondition, data: any, validationState?: any): readonly SchemaError[] {
+//     return execute(schema, (s, schema) => validateConcreteSchema(context, schema, data), initialState)
+// }
 
 export type ValidationError = Readonly<{
     field: string
