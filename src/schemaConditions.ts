@@ -1,6 +1,6 @@
 import { Schema, ConcreteSchema, TypedSchema } from "./jsonSchema"
 import { ValidationContext } from "./validationContext"
-import { tpl, logAnd } from "./utils.js"
+import { tpl, logAnd, dirAnd } from "./utils.js"
 
 const emptyReadOnlyList: readonly any[] = []
 const emptyRefPaths: readonly RefPath[] = []
@@ -113,14 +113,20 @@ export type OneOfCondition = Readonly<{
     $type: "oneOf"
     conditions: readonly SchemaCondition[]
 }>
-const oneOfStrings: readonly string[] = ["oneOf"]
+const oneOfString = "oneOf"
+const oneOfStrings: readonly string[] = [oneOfString]
 function oneOf(schemaCondition: OneOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
     const [falseCount, errors] = schemaCondition.conditions.reduce((s, x) => {
         const result = execute(x, f)
-        if (result.length) {
-            s[0] += 1
-            if (s[1] == null) s[1] = [...result]
-            else s[1].push(...result)
+        if (!result.length) return s
+        
+        s[0] += 1
+        s[1] = s[1] || []
+        for (let i = 0; i < result.length; i++) {
+            s[1].push({
+                ...result[i],
+                schemaPath: [oneOfString, i.toString(), ...result[i].schemaPath]
+            })
         }
 
         return s
@@ -245,7 +251,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
         topLevel.push({
             $type: "oneOf",
-            conditions: schema.oneOf.map((x, i) => _build(context, x, [...path, "oneOf", i.toString()], refPath))
+            conditions: schema.oneOf.map((x, i) => _build(context, x, path, refPath))
         })
     }
 

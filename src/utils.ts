@@ -51,3 +51,12 @@ export function logAnd<T>(x: T, ...msg: any[]) {
     return x
 }
 
+export function dirAnd<T>(data: T, context: any = null, depth = 10) {
+    console.dir({
+        data,
+        context
+    }, {depth})
+
+    return data
+}
+
