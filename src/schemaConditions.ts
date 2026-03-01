@@ -71,22 +71,34 @@ function resolveRef(
     return _build(context, target, [...path, loc.hash], refPath)
 }
 
+export type RootCondition = Readonly<{
+    $type: "root"
+    conditions: readonly SchemaCondition[]
+}>
+function root(schemaCondition: RootCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
+    return _allOf(schemaCondition.conditions, f, false)
+}
+
 export type AllOfCondition = Readonly<{
     $type: "allOf"
     conditions: readonly SchemaCondition[]
 }>
-function allOf(schemaCondition: AllOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
-    return schemaCondition.conditions.reduce((s, x, i) => {
+function _allOf(schemaConditions: readonly SchemaCondition[], f: (x: TypedSchema) => readonly SchemaError[], addPathToErrors = true): readonly SchemaError[] {
+    return schemaConditions.reduce((s, x, i) => {
         const result = execute(x, f)
         if (!result.length) return s
 
-        s = pushIfAppropriate(s, result, e => ({
+        s = pushIfAppropriate(s, result, (addPathToErrors || null) && (e => ({
             ...e,
             schemaPath: ["allOf", i.toString(), ...e.schemaPath]
-        }))
+        })))
 
         return s
     }, null as SchemaError[] | null) || emptyReadOnlyList
+}
+
+function allOf(schemaCondition: AllOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
+    return _allOf(schemaCondition.conditions, f, true)
 }
 
 const anyOfString = "anyOf"
@@ -178,6 +190,7 @@ export type SchemaCondition =
     | AnyOfCondition
     | OneOfCondition
     | NotCondition
+    | RootCondition
 
 function prependSchemaPath(errors: readonly SchemaError[], schemaPath: readonly string[]): readonly SchemaError[] {
     if (!errors.length || !schemaPath.length) return errors
@@ -208,59 +221,62 @@ export function execute(
         return not(schemaCondition, f)
     }
 
+    if (schemaCondition.$type === "root") {
+        return root(schemaCondition, f)
+    }
+
     return prependSchemaPath(f(schemaCondition.schema), schemaCondition.path)
 }
-
-// /** Use quick pool of single paths -or- build a new path */
-// function appendPath(path: readonly string[], next: SchemaPath): readonly string[] {
-//     return (!path.length && cachedPaths[next]) || [...path, next]
-// }
 
 // const dynamicRefStrings: readonly string[] = ["$dynamicRef"]
 // const refStrings: readonly string[] = ["$ref"]
 // const allOfStrings: readonly string[] = ["allOf"]
+
+/** Converts the conditions to an array if required, pushes the new condition and returns
+ * the new or old array
+ */
+function pushCondition(conditions: SchemaCondition | SchemaCondition[], condition: SchemaCondition) {
+    if (!Array.isArray(conditions)) conditions = [conditions]
+    conditions.push(condition)
+    return conditions
+}
+
 function _build(context: ValidationContext, schema: Schema, path: readonly string[], refPath: readonly RefPath[]): SchemaCondition {
     if (typeof schema === "boolean") return {$type: "leaf", path, schema: schema}
 
     let topLevel: SchemaCondition | SchemaCondition[] = { $type: "leaf", path, schema }
 
     if (schema.$ref) {
-        if (!Array.isArray(topLevel)) topLevel = [topLevel]
-        topLevel.push(resolveRef(context, schema.$ref, "ref", path, refPath))
+        topLevel = pushCondition(topLevel, resolveRef(context, schema.$ref, "ref", path, refPath))
     }
 
     if (schema.$dynamicRef) {
-        if (!Array.isArray(topLevel)) topLevel = [topLevel]
-        topLevel.push(resolveRef(context, schema.$dynamicRef, "dynamicRef", path, refPath))
+        topLevel = pushCondition(topLevel, resolveRef(context, schema.$dynamicRef, "dynamicRef", path, refPath))
     }
 
     if (schema.allOf && schema.allOf.length) {
-        if (!Array.isArray(topLevel)) topLevel = [topLevel]
-        topLevel.push(...schema.allOf.map(x => _build(context, x, path, refPath)))
+        topLevel = pushCondition(topLevel, {
+            $type: "allOf",
+            conditions: schema.allOf.map(x => _build(context, x, path, refPath))
+        })
     }
 
     if (schema.anyOf) {
-        if (!Array.isArray(topLevel)) topLevel = [topLevel]
-
-        topLevel.push({
+        topLevel = pushCondition(topLevel, {
             $type: "anyOf",
             conditions: schema.anyOf.map(x => _build(context, x, path, refPath))
         })
     }
 
     if (schema.oneOf) {
-        if (!Array.isArray(topLevel)) topLevel = [topLevel]
-
-        topLevel.push({
+        topLevel = pushCondition(topLevel, {
             $type: "oneOf",
             conditions: schema.oneOf.map(x => _build(context, x, path, refPath))
         })
     }
 
     if (schema.not) {
-        if (!Array.isArray(topLevel)) topLevel = [topLevel]
-
-        topLevel.push({
+        topLevel = pushCondition(topLevel, {
             $type: "not",
             condition: _build(context, schema.not, notStrings, refPath)
         })
@@ -268,7 +284,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
     if (Array.isArray(topLevel)) {
         return {
-            $type: "allOf",
+            $type: "root",
             conditions: topLevel
         }
     }

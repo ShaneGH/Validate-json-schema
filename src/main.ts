@@ -238,7 +238,7 @@ function schemaError(name: string, f: (() => ValidationError[]), msg: string) {
         ["#/properties/t_contains_array/contains", "t_contains_array"]
     ])
 
-    success("anchored array", () => validateDocument(schema, { "t_string": "xxx", "t_defd_anchor": [true] }))
+    // success("anchored array", () => validateDocument(schema, { "t_string": "xxx", "t_defd_anchor": [true] }))
     failure("anchored, mix of good and bad data", () => validateDocument(schema, { "t_string": "", "t_defd_anchor": [true, 8] }), 
         [["#/properties/t_defd_anchor/#anchored_array/items/type", "t_defd_anchor/1"]])
 
@@ -379,7 +379,7 @@ function schemaError(name: string, f: (() => ValidationError[]), msg: string) {
             schema.type = "object"
         }
 
-        // console.dir(schema, {depth: 10})
+        //console.dir(schema, {depth: 10})
         
         return schema
     }

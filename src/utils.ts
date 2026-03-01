@@ -12,7 +12,7 @@ export function isReadOnlyArray<T, U>(xs: readonly T[] | (U extends any[] ? neve
 export function pushIfAppropriate<T>(
     accumulator: T[] | null, 
     errors: T | readonly T[] | null,
-    f?: (e: T) => T): T[] | null {
+    f?: ((e: T) => T) | null): T[] | null {
 
     if (errors == null) return accumulator
 
