@@ -76,12 +76,14 @@ export type AllOfCondition = Readonly<{
     conditions: readonly SchemaCondition[]
 }>
 function allOf(schemaCondition: AllOfCondition, f: (x: TypedSchema) => readonly SchemaError[]): readonly SchemaError[] {
-    return schemaCondition.conditions.reduce((s, x) => {
+    return schemaCondition.conditions.reduce((s, x, i) => {
         const result = execute(x, f)
-        if (result.length) {
-            if (s == null) s = [...result]
-            else s.push(...result)
-        }
+        if (!result.length) return s
+
+        s = pushIfAppropriate(s, result, e => ({
+            ...e,
+            schemaPath: ["allOf", i.toString(), ...e.schemaPath]
+        }))
 
         return s
     }, null as SchemaError[] | null) || emptyReadOnlyList
@@ -234,7 +236,7 @@ function _build(context: ValidationContext, schema: Schema, path: readonly strin
 
     if (schema.allOf && schema.allOf.length) {
         if (!Array.isArray(topLevel)) topLevel = [topLevel]
-        topLevel.push(...schema.allOf.map((x, i) => _build(context, x, [...path, "allOf", i.toString()], refPath)))
+        topLevel.push(...schema.allOf.map(x => _build(context, x, path, refPath)))
     }
 
     if (schema.anyOf) {
