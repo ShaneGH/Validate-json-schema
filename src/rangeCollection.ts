@@ -6,7 +6,7 @@ type RangeItem = {
 } | number
 
 export type Range = {
-    compaction: 0
+    compaction: number
     items: RangeItem[]
 }
 
@@ -30,11 +30,11 @@ function compare(x: number, rangeItem: RangeItem) {
     return 0
 }
 
-function itemFrom(item: RangeItem) {
+export function itemFrom(item: RangeItem) {
     return typeof item === "number" || typeof item === "bigint" ? item : item.from
 }
 
-function itemTo(item: RangeItem) {
+export function itemTo(item: RangeItem) {
     return typeof item === "number" || typeof item === "bigint" ? item + 1 : item.to
 }
 
@@ -43,11 +43,16 @@ function adjacent(item1: RangeItem, item2: RangeItem) {
 }
 
 function tryAdd(x: number, range: Range, index: number): "ADDED" | "ALREADY_EXISTS" | number {
-    const rangeItem = range.items[index]
-    //console.log("    tryAdd", x, rangeItem)
-    const cmp = compare(x, rangeItem)
-    if (cmp === 1) {
-        range.items[index] = { from: itemFrom(rangeItem), to: x + 1 }
+    
+    const cmp = compare(x, range.items[index])
+    if (cmp > 0) {
+        if (index < range.items.length - 1 && compare(x, range.items[index + 1]) === 0) {
+            return "ALREADY_EXISTS"
+        }
+
+        if (cmp > 1) return cmp
+
+        range.items[index] = { from: itemFrom(range.items[index]), to: x + 1 }
 
         if (index < range.items.length - 1 && adjacent(range.items[index], range.items[index + 1])) {
             range.compaction += 1
@@ -58,10 +63,16 @@ function tryAdd(x: number, range: Range, index: number): "ADDED" | "ALREADY_EXIS
     }
 
     //if (cmp === 0) return logAnd("ALREADY_EXISTS")
-    if (cmp === 0) return "ALREADY_EXISTS"
+    //if (cmp === 0) 
 
-    if (cmp === -1) {
-        range.items[index] = { from: x, to: itemTo(rangeItem) }
+    if (cmp < 0) {
+        if (index > 0 && compare(x, range.items[index - 1]) === 0) {
+            return "ALREADY_EXISTS"
+        }
+
+        if (cmp < -1) return cmp
+
+        range.items[index] = { from: x, to: itemTo(range.items[index]) }
         if (index > 0 && adjacent(range.items[index - 1], range.items[index])) {
             range.compaction += 1
         }
@@ -71,7 +82,7 @@ function tryAdd(x: number, range: Range, index: number): "ADDED" | "ALREADY_EXIS
     }
 
     //return logAnd(cmp)
-    return cmp
+    return "ALREADY_EXISTS"
 }
 
 function _addToRange(range: Range, needle: number, start: number, end: number): boolean | number {
@@ -91,14 +102,14 @@ function _addToRange(range: Range, needle: number, start: number, end: number): 
     return false
 }
 
-function compact(range: Range) {
+export function forceCompact(range: Range) {
     for (let i = 1; i < range.items.length; i++) {
         if (!adjacent(range.items[i - 1], range.items[i]))
             continue
 
         let j = i + 1
         for (; j < range.items.length; j++) {
-            if (!adjacent(range.items[j - 1], range.items[i]))
+            if (!adjacent(range.items[j - 1], range.items[j]))
                 break
         }
 
@@ -125,10 +136,9 @@ export function addToRange(range: Range, needle: number): boolean {
         return true
     }
 
-    if (range.compaction > 100 
-        && range.compaction / range.items.length > 0.7) {
-        
-        compact(range)
+    if (range.compaction >= 100 
+        && range.compaction / range.items.length >= 0.7) {
+        forceCompact(range)
     }
 
     switch (tryAdd(needle, range, range.items.length - 1)) {
@@ -140,11 +150,12 @@ export function addToRange(range: Range, needle: number): boolean {
     if (typeof result === "boolean") return result
 
     result = Math.max(0, Math.min(result, range.items.length - 1))
-    while (result < range.items.length - 1 && compare(needle, range.items[result]) > 0) result += 1
-    console.log("### inter", needle, result)
+    //console.log("### fst", needle, result)
     while (result > 0 && compare(needle, range.items[result]) < 0) result -= 1
+    //console.log("### inter", needle, result)
+    while (result < range.items.length && compare(needle, range.items[result]) > 0) result += 1
     
-    console.log("###", needle, result, range.items[result], compare(needle, range.items[result]))
+    //console.log("###", needle, result, result < range.items.length && range.items[result], result < range.items.length && compare(needle, range.items[result]))
     range.items.splice(result, 0, needle)
     return true
 }

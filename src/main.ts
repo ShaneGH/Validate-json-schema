@@ -1,6 +1,6 @@
 
 import { JsonDocument } from "./jsonSchema"
-import { addToRange, advanceRangeCursor, create as createRange} from "./rangeCollection.js"
+import { addToRange, advanceRangeCursor, create as createRange, forceCompact, itemFrom, itemTo} from "./rangeCollection.js"
 import { validateDocument, ValidationError } from "./validate.js"
 
 let count = 0
@@ -533,33 +533,164 @@ function schemaError(name: string, f: (() => ValidationError[]), msg: string) {
 (function range() {
     const range = createRange()
 
-    const numbers = [ 4, 2, 8]
-    // [...Array(5).keys()]
-    //     .map(i => [Math.random(), i * 2])
-    //     .sort((x, y) => x[0] - y[0])
-    //     .map(x => x[1]);
+    const numbers = [...Array(500).keys()]
+        .map((_, i) => [Math.random(), i])
+        .sort((x, y) => x[0] - y[0])
+        .map(x => x[1]);
 
-        console.log(numbers)
+    const added: Record<number, true> = {}
     for (let n of numbers) {
-        console.log("adding", n, range.items)
+        if (n % 3 !== 0) continue
+        added[n] = true
+        console.assert(addToRange(range, n), "FIRST_ADD", n, range.items)
+    }
+
+    function rangeCheck(shouldBeAdded: ((x: number) => boolean), name: string) {
+        ///console.dir(range.items)
+        let i = 0
+        let cursor = 0 as "NOT_FOUND" | "EXHAUSTED_CURSOR" | number
+        while (typeof cursor === "number") {
+            cursor = advanceRangeCursor(range, cursor, i)
+            console.assert(typeof cursor === "number"
+                ? shouldBeAdded(i)
+                : cursor === "EXHAUSTED_CURSOR"
+                    ? i === numbers.length
+                    : !shouldBeAdded(i), `CURSOR_NAVIGATION${name}`, cursor, i)
+
+            i++
+        }
+
+        for (let i = 1; i < range.items.length; i++) {
+            console.assert(
+                itemTo(range.items[i - 1]) <= itemFrom(range.items[i]), 
+                `RANGE_CHECK${name}`, i, range.items[i - 1], range.items[i])
+        }
+    }
+
+    rangeCheck(x => !!added[x], "1")
+
+    for (let n of numbers) {
+        const addResult = addToRange(range, n)
+        added[n] = true
+        console.assert(addResult == (n % 3 !== 0), "SECOND_ADD", n, range.items)
+        if (range.compaction >= 100 && range.compaction / range.items.length >= 0.7) break
+    }
+
+    rangeCheck(x => !!added[x], "2")
+
+    const length = range.items.length
+    console.assert(range.compaction > 0, range.compaction)
+
+    for (let n of numbers) {
+        const addResult = addToRange(range, n)
+        if (!addResult) continue
+        added[n] = true
+        break
+    }
+
+    // TODO: fix this test
+    // add tests for unevaluated items
+    // add tests for unevaluated properties
+
+    console.assert(range.items.length < length, "THIRD_ADD_1", range.items.length, range.compaction)
+    console.assert(range.compaction === 0, "THIRD_ADD_2", range.items.length, range.compaction)
+
+    rangeCheck(x => !!added[x], "3")
+    console.dir(range)
+    for (let n of numbers) {
         addToRange(range, n)
-        console.log("added", n, range.items)
     }
 
-    console.dir(range, {depth: 100})
+    console.dir(range)
 
-    let i = 0
-    let cursor = 0 as "NOT_FOUND" | "EXHAUSTED_CURSOR" | number
-    while (typeof cursor === "number") {
-        cursor = advanceRangeCursor(range, cursor, i)
-        console.assert(typeof cursor === "number"
-            ? i % 2 == 0
-            : cursor === "EXHAUSTED_CURSOR"
-                ? i >= 1000
-                : i % 2 == 1, cursor, i)
-
-        i += 2
+    //forceCompact(range)
+    for (let y of range.items) {
+        console.log(y)
     }
+    console.assert(range.items.length === 1, "FOURTH_ADD", range.items.length, range.compaction)
+
+    rangeCheck(x => x < numbers.length, "4")
+
+    
+
+
+    // console.assert(range.items.length === 500, range.items.length)
+    // for (let i = 120; range.compaction <= 99 && (range.compaction + 1) / range.items.length < 0.7; i++) {
+    //     const atr = addToRange(range, i)
+    //     console.assert(atr === (i % 2 == 1), "SECOND_ADD", atr, i)
+    // }
+
+    // const l = range.items.length
+    // console.assert(range.compaction > 0, "CMPT_1")
+
+    // cursor = 0 as "NOT_FOUND" | "EXHAUSTED_CURSOR" | number
+    // while (typeof cursor === "number") {
+    //     cursor = advanceRangeCursor(range, cursor, i)
+    //     console.assert(typeof cursor === "number"
+    //         ? i % 2 == 0 || (i >= 120 && i < 400)
+    //         : cursor === "EXHAUSTED_CURSOR"
+    //             ? i >= 1000
+    //             : i % 2 == 1, "CURSOR_NAVIGATION2", cursor, i)
+
+    //     i += 2
+    // }
+
+    // for (let i = 1; i < range.items.length; i++) {
+    //     console.assert(itemTo(range.items[i - 1]) <= itemFrom(range.items[i]), "RANGE_CHECK2", i, range.items[i - 1], range.items[i])
+    // }
+
+    // console.assert(range.items.length === 500, range.items.length)
+    // for (let i = 120; range.compaction <= 99 && (range.compaction + 1) / range.items.length < 0.7; i++) {
+    //     const atr = addToRange(range, i)
+    //     console.assert(atr === (i % 2 == 1), "SECOND_ADD", atr, i)
+    // }
+
+    // console.assert(range.compaction > 0, "CMPT_1")
+
+    // cursor = 0 as "NOT_FOUND" | "EXHAUSTED_CURSOR" | number
+    // while (typeof cursor === "number") {
+    //     cursor = advanceRangeCursor(range, cursor, i)
+    //     console.assert(typeof cursor === "number"
+    //         ? i % 2 == 0 || (i >= 120 && i < 400)
+    //         : cursor === "EXHAUSTED_CURSOR"
+    //             ? i >= 1000
+    //             : i % 2 == 1, "CURSOR_NAVIGATION2", cursor, i)
+
+    //     i += 2
+    // }
+
+    // const len = range.items.length
+    // for (let i = 1; i < range.items.length; i++) {
+    //     console.assert(itemTo(range.items[i - 1]) <= itemFrom(range.items[i]), "RANGE_CHECK2", i, range.items[i - 1], range.items[i])
+    // }
+
+    // for (let i = 0; range.compaction != 0; i++) {
+    //     const atr = addToRange(range, i)
+    //     console.assert(atr === (i % 2 == 1), "SECOND_ADD", atr, i)
+    // }
+
+    // console.assert(range.compaction === 0, "CMPT_2")
+    // console.assert(range.items.length < len, "CMPT_2")
+
+    // cursor = 0 as "NOT_FOUND" | "EXHAUSTED_CURSOR" | number
+    // while (typeof cursor === "number") {
+    //     cursor = advanceRangeCursor(range, cursor, i)
+    //     console.assert(typeof cursor === "number"
+    //         ? i % 2 == 0 || (i >= 120 && i < 400)
+    //         : cursor === "EXHAUSTED_CURSOR"
+    //             ? i >= 1000
+    //             : i % 2 == 1, "CURSOR_NAVIGATION2", cursor, i)
+
+    //     i += 2
+    // }
+
+    // for (let i = 1; i < range.items.length; i++) {
+    //     console.assert(itemTo(range.items[i - 1]) <= itemFrom(range.items[i]), "RANGE_CHECK2", i, range.items[i - 1], range.items[i])
+    // }
+
+
+
+    // console.dir(range, {depth: 100})
 }());
 
 
