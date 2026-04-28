@@ -1,7 +1,9 @@
 import { SchemaType } from "./jsonSchema.js"
 
-export function tpl<T1, T2>(x: T1, y: T2): [T1, T2] {
-    return [x, y]
+export function tpl<T1, T2>(x: T1, y: T2): [T1, T2]
+export function tpl<T1, T2, T3>(x: T1, y: T2, z: T3): [T1, T2, T3]
+export function tpl(): any {
+    return [...arguments]
 }
 
 export function isReadOnlyArray<T, U>(xs: readonly T[] | (U extends any[] ? never : U)): xs is readonly T[] {

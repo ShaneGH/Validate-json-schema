@@ -39,86 +39,99 @@ export function itemTo(item: RangeItem) {
 }
 
 function adjacent(item1: RangeItem, item2: RangeItem) {
-    return itemTo(item1) == itemFrom(item2)
+    return itemTo(item1) === itemFrom(item2)
 }
 
-function tryAdd(x: number, range: Range, index: number): "ADDED" | "ALREADY_EXISTS" | number {
-    
-    const cmp = compare(x, range.items[index])
-    if (cmp > 0) {
-        if (index < range.items.length - 1 && compare(x, range.items[index + 1]) === 0) {
-            return "ALREADY_EXISTS"
-        }
-
-        if (cmp > 1) return cmp
-
-        range.items[index] = { from: itemFrom(range.items[index]), to: x + 1 }
-
-        if (index < range.items.length - 1 && adjacent(range.items[index], range.items[index + 1])) {
-            range.compaction += 1
-        }
-
-        //return logAnd("ADDED")
-        return "ADDED"
-    }
-
-    //if (cmp === 0) return logAnd("ALREADY_EXISTS")
-    //if (cmp === 0) 
-
-    if (cmp < 0) {
-        if (index > 0 && compare(x, range.items[index - 1]) === 0) {
-            return "ALREADY_EXISTS"
-        }
-
-        if (cmp < -1) return cmp
-
-        range.items[index] = { from: x, to: itemTo(range.items[index]) }
-        if (index > 0 && adjacent(range.items[index - 1], range.items[index])) {
-            range.compaction += 1
-        }
-
-        //return logAnd("ADDED")
-        return "ADDED"
-    }
-
-    //return logAnd(cmp)
-    return "ALREADY_EXISTS"
-}
-
-function _addToRange(range: Range, needle: number, start: number, end: number): boolean | number {
-    
-    if (start >= end || start < 0 || end > range.items.length) return start
+function findBestPosition(range: Range, needle: number, start: number, end: number): number {
+   
+    if (start >= end) return start
 
     const pivotI = start + Math.floor((end - start) / 2)
+    const cmp = compare(needle, range.items[pivotI])
 
-    const cmp = tryAdd(needle, range, pivotI)
-    switch (cmp) {
-        case "ADDED": return true
-        case "ALREADY_EXISTS": return false
+    if (cmp < -1) return findBestPosition(range, needle, start, pivotI)
+    if (cmp > 1) return findBestPosition(range, needle, pivotI + 1, end)
+
+    if (pivotI > 0 && !compare(needle, range.items[pivotI - 1]))
+        return pivotI - 1
+
+    if (pivotI < range.items.length - 1 && !compare(needle, range.items[pivotI + 1]))
+        return pivotI + 1
+
+    return pivotI
+}
+
+function addAt(x: number, range: Range, index: number) {
+
+    const addResult = _addAt(x, range, index)
+
+    if ((addResult === "BEFORE" || addResult === "BOTH")
+        && index > 0 
+        && adjacent(range.items[index - 1], range.items[index]))
+        range.compaction += 1
+
+    if ((addResult === "AFTER" || addResult === "BOTH")
+        && index < range.items.length - 1 
+        && adjacent(range.items[index], range.items[index + 1]))
+        range.compaction += 1
+}
+
+function _addAt(x: number, range: Range, index: number): "NONE" | "AFTER" | "BEFORE" | "BOTH" {
+    if (index >= range.items.length) {
+        range.items.push(x)
+        return "AFTER"
     }
 
-    if (cmp < 0) return _addToRange(range, needle, start, pivotI)
-    if (cmp > 0) return _addToRange(range, needle, pivotI + 1, end)
-    return false
+    const cmp = compare(x, range.items[index])
+    
+    if (cmp === 0) return "NONE"
+
+    if (cmp === -1) {
+        range.items[index] = {
+            from: x,
+            to: itemTo(range.items[index])
+        }
+
+        return "BEFORE"
+    }
+
+    if (cmp === 1) {
+        range.items[index] = {
+            from: itemFrom(range.items[index]),
+            to: x + 1
+        }
+
+        return "AFTER"
+    }
+
+    if (cmp < -1) {
+        if (index && compare(x, range.items[index - 1]) <= 0) throw new Error("Invalid add position")
+    } else {
+        // cmp > 1
+        if (index < range.items.length - 1 && compare(x, range.items[index + 1]) >= 0) throw new Error("Invalid add position")
+    }
+
+    range.items.splice(index, 0, x)
+    return "BOTH"
 }
 
 export function forceCompact(range: Range) {
-    for (let i = 1; i < range.items.length; i++) {
-        if (!adjacent(range.items[i - 1], range.items[i]))
+    for (let i = 0; i < range.items.length - 1; i++) {
+        if (!adjacent(range.items[i], range.items[i + 1]))
             continue
 
         let j = i + 1
-        for (; j < range.items.length; j++) {
-            if (!adjacent(range.items[j - 1], range.items[j]))
+        for (; j < range.items.length - 1; j++) {
+            if (!adjacent(range.items[j], range.items[j + 1]))
                 break
         }
 
-        range.items[i - 1] = {
-            from: itemFrom(range.items[i - 1]),
-            to: itemTo(range.items[j - 1])
+        range.items[i] = {
+            from: itemFrom(range.items[i]),
+            to: itemTo(range.items[j])
         }
 
-        range.items.splice(i, j - 1)
+        range.items.splice(i + 1, j - i)
     }
 
     range.compaction = 0
@@ -126,6 +139,14 @@ export function forceCompact(range: Range) {
 
 export function create(): Range {
     return {items: [], compaction: 0}
+}
+
+export function contains(range: Range, needle: number): boolean {
+    const pos = findBestPosition(range, needle, 0, range.items.length)
+    if (pos >= range.items.length) return false
+
+    return compare(needle, range.items[pos]) === 0
+
 }
 
 /** Returns true if inserted, false if it is already in the list */
@@ -137,26 +158,13 @@ export function addToRange(range: Range, needle: number): boolean {
     }
 
     if (range.compaction >= 100 
-        && range.compaction / range.items.length >= 0.7) {
+        && range.compaction / range.items.length >= 0.7)
         forceCompact(range)
-    }
 
-    switch (tryAdd(needle, range, range.items.length - 1)) {
-        case "ADDED": return true
-        case "ALREADY_EXISTS": return false
-    }
+    const pos = findBestPosition(range, needle, 0, range.items.length)
+    if (pos < range.items.length && !compare(needle, range.items[pos])) return false
 
-    let result = _addToRange(range, needle, 0, range.items.length)
-    if (typeof result === "boolean") return result
-
-    result = Math.max(0, Math.min(result, range.items.length - 1))
-    //console.log("### fst", needle, result)
-    while (result > 0 && compare(needle, range.items[result]) < 0) result -= 1
-    //console.log("### inter", needle, result)
-    while (result < range.items.length && compare(needle, range.items[result]) > 0) result += 1
-    
-    //console.log("###", needle, result, result < range.items.length && range.items[result], result < range.items.length && compare(needle, range.items[result]))
-    range.items.splice(result, 0, needle)
+    addAt(needle, range, pos)
     return true
 }
 
