@@ -1,5 +1,5 @@
-import { Schema, ConcreteSchema, TypedSchema } from "./jsonSchema"
-import { ValidationContext } from "./validationContext"
+import { Schema, ConcreteSchema, TypedSchema } from "./jsonSchema.js"
+import { ValidationContext } from "./validationContext.js"
 import { tpl, logAnd, dirAnd, pushIfAppropriate, isReadOnlyArray } from "./utils.js"
 
 const emptyReadOnlyList: readonly any[] = []

@@ -1,4 +1,4 @@
-import { SchemaType } from "./jsonSchema"
+import { SchemaType } from "./jsonSchema.js"
 
 export function tpl<T1, T2>(x: T1, y: T2): [T1, T2] {
     return [x, y]
@@ -12,21 +12,21 @@ export function isReadOnlyArray<T, U>(xs: readonly T[] | (U extends any[] ? neve
  * Creates the accumulator if required and there is something to push */
 export function pushIfAppropriate<T>(
     accumulator: T[] | null, 
-    errors: T | readonly T[] | null,
+    items: T | readonly T[] | null,
     f?: ((e: T) => T) | null): T[] | null {
 
-    if (errors == null) return accumulator
+    if (items == null) return accumulator
 
-    if (!Array.isArray(errors)) {
-        const nonArrayErr = errors as any   // typescipt having difficulties here
+    if (!Array.isArray(items)) {
+        const nonArrayItems = items as any   // typescipt having difficulties here
         accumulator = accumulator || []
-        accumulator.push(f && f(nonArrayErr) || nonArrayErr)
+        accumulator.push(f && f(nonArrayItems) || nonArrayItems)
         return accumulator
     }
 
-    if (!errors.length) return accumulator
+    if (!items.length) return accumulator
     accumulator = accumulator || []
-    for (let err of errors)
+    for (let err of items)
         accumulator.push(f && f(err) || err)
 
     return accumulator

@@ -1,5 +1,5 @@
 
-import { JsonDocument } from "./jsonSchema"
+import { JsonDocument } from "./jsonSchema.js"
 import { addToRange, advanceRangeCursor, create as createRange, forceCompact, itemFrom, itemTo} from "./rangeCollection.js"
 import { validateDocument, ValidationError } from "./validate.js"
 
@@ -596,17 +596,17 @@ function schemaError(name: string, f: (() => ValidationError[]), msg: string) {
     console.assert(range.compaction === 0, "THIRD_ADD_2", range.items.length, range.compaction)
 
     rangeCheck(x => !!added[x], "3")
-    console.dir(range)
+    //console.dir(range)
     for (let n of numbers) {
         addToRange(range, n)
     }
 
-    console.dir(range)
+    //console.dir(range)
 
     //forceCompact(range)
-    for (let y of range.items) {
-        console.log(y)
-    }
+    // for (let y of range.items) {
+    //     console.log(y)
+    // }
     console.assert(range.items.length === 1, "FOURTH_ADD", range.items.length, range.compaction)
 
     rangeCheck(x => x < numbers.length, "4")

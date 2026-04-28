@@ -7,9 +7,12 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "npx tsc",
+    "test": "node --test \"./dist/**/*test.js\" \"./dist/**/*test.mjs\"",
+    "build-and-test": "npm run build && npm run test"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "typescript": "^5.9.3"
   },
   "keywords": []

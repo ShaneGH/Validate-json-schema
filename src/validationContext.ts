@@ -1,8 +1,8 @@
 
 import {
     JsonDocument, Schema
-} from "./jsonSchema"
-import { Range } from "./rangeCollection"
+} from "./jsonSchema.js"
+import { Range } from "./rangeCollection.js"
 
 type Nil = null | undefined
 
