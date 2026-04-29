@@ -1,6 +1,6 @@
 
 import { test } from 'node:test';
-import { failure, freakyObject, success, validate } from "../shared.mjs"
+import { assertValidation, freakyObject, validate } from "../shared.mjs"
 import { JsonDocument } from '../../src/jsonSchema.js';
 import { tpl } from '../../src/utils.js';
 
@@ -24,12 +24,12 @@ test('const/enum', { concurrency: true }, t => {
                 constraint = [constraint]
 
             for (let prop of constraint) {
-                t.test(`Success: ${JSON.stringify(prop)}`, () => success(() => 
+                t.test(`Success: ${JSON.stringify(prop)}`, () => assertValidation(() => 
                     validate(schema, { prop })));
             }
 
             for (let prop of [undefined, 2, "55"]) {
-                t.test(`Failure: ${JSON.stringify(prop)}`, () => failure(() => 
+                t.test(`Failure: ${JSON.stringify(prop)}`, () => assertValidation(() => 
                     validate(schema, { prop }),
                     {schema: `#/properties/prop/${name}`, field: "prop"}));
             }
@@ -49,7 +49,7 @@ test('const/enum', { concurrency: true }, t => {
 
                     t.test(
                         `Failure: ${JSON.stringify(cpy)}`, 
-                        () => failure(() => validate(
+                        () => assertValidation(() => validate(
                             schema, 
                             { "t_string": "xxx", "prop": cpy }),
                             {schema: `#/properties/prop/${name}`, field: "prop"}))

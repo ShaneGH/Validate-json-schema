@@ -71,7 +71,6 @@ test('rangeCollection', { concurrency: true }, () => {
     }
 
     // TODO:
-    // add tests for unevaluated items
     // add tests for unevaluated properties
 
     assert(range.items.length < length, `THIRD_ADD_1 ${range.items.length}, ${range.compaction}`)

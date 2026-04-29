@@ -1,6 +1,6 @@
 
 import { test } from 'node:test';
-import { failure, success, validate } from "../shared.mjs"
+import { assertValidation, validate } from "../shared.mjs"
 import { JsonDocument } from '../../src/jsonSchema.js';
 import { tpl } from '../../src/utils.js';
 
@@ -60,7 +60,7 @@ test('permissiveProperties', { concurrency: true }, t => {
             if (name === "fallthrough") continue
 
             t.test(`${name}`, () => 
-                success(() => validate(schema, { 
+                assertValidation(() => validate(schema, { 
                     [name]: { "prop": "xxx" }
                 })))
 
@@ -74,13 +74,13 @@ test('permissiveProperties', { concurrency: true }, t => {
             tpl("nullable", {x: 8, y: null})]) {
 
             t.test(`${name}`, t =>
-                success(() => validate(schema, { 
+                assertValidation(() => validate(schema, { 
                     [name]: { "prop": "xxx", ...values }
                 })))
         }
 
         t.test(`fallthrough`, t =>
-            success(() => validate(schema, { 
+            assertValidation(() => validate(schema, { 
                 "fallthrough": { "Xprop": null }
             })))
     })
@@ -117,7 +117,7 @@ test('permissiveProperties', { concurrency: true }, t => {
         ]) {
 
             t.test(`${name}`, () =>
-                failure(() => validate(schema, { 
+                assertValidation(() => validate(schema, { 
                     [name]: { "prop": "xxx", ...values }
                 }),
                 errors))

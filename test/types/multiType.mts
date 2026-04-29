@@ -1,6 +1,6 @@
 
 import { test } from 'node:test';
-import { failure, success, validate } from "../shared.mjs"
+import { assertValidation, validate } from "../shared.mjs"
 import { JsonDocument } from '../../src/jsonSchema.js';
 
 test('Multiple types', { concurrency: true }, t => {
@@ -13,17 +13,17 @@ test('Multiple types', { concurrency: true }, t => {
         }
     }
 
-    t.test(`Success, string`, () => success(() => 
+    t.test(`Success, string`, () => assertValidation(() => 
         validate(schema, { prop: "333.44" })));
 
-    t.test(`Success, number`, () => success(() => 
+    t.test(`Success, number`, () => assertValidation(() => 
         validate(schema, { prop: 333.44 })));
 
-    t.test(`Incorrect data type`, () => failure(() => 
+    t.test(`Incorrect data type`, () => assertValidation(() => 
         validate(schema, { prop: {} }),
         [{schema: "#/properties/prop/type", field: "prop"}]));
 
-    t.test(`null`, () => failure(() => 
+    t.test(`null`, () => assertValidation(() => 
         validate(schema, { prop: null }),
         [{schema: "#/properties/prop/type", field: "prop"}]));
 });

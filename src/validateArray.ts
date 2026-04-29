@@ -24,11 +24,31 @@ const containsErrors: readonly SchemaError[] = [{
     message: "Array does not contain element which matches constraint"
 }]
 
+const maxContainsError = {
+    fieldPath: emptyStrings,
+    schemaPath: ["maxContains"]
+}
+
+const minContainsError = {
+    fieldPath: emptyStrings,
+    schemaPath: ["minContains"]
+}
+
+const maxItemsError = {
+    fieldPath: emptyStrings,
+    schemaPath: ["maxItems"]
+}
+
+const minItemsError = {
+    fieldPath: emptyStrings,
+    schemaPath: ["minItems"]
+}
+
 export function validateArraySchema(validateSchema: ValidateSchema, 
     context: ValidationContext, schema: ArraySchema, data: any, validationState: MutableValidationState): readonly SchemaError[] {
     if (!checkType("array", data) || !hasAtLeastOneProp(schema, ArraySchemaTemplate)) return emptyErrors
 
-    if (!data.length) return schema.contains ? containsErrors : emptyErrors
+    if (!data.length && (schema.minItems || 0) == 0) return schema.contains ? containsErrors : emptyErrors
 
     validationState.visitedItems = validationState.visitedItems || { visited: createRange() }
 
@@ -38,8 +58,23 @@ export function validateArraySchema(validateSchema: ValidateSchema,
     }
 
     let contains = schema.contains && buildSchemaCondition(context, schema.contains) || null
+    let containsCount = 0
     let items: SchemaCondition | null | undefined = null
     let errs: SchemaError[] | null = null
+
+    if (data.length < (schema.minItems || 0)) {
+        errs = pushIfAppropriate(errs, {
+            ...minItemsError,
+            message: `Array contains less than the minItems value ${schema.minItems}`
+        })
+    }
+
+    if (data.length > (schema.maxItems || Number.MAX_SAFE_INTEGER)) {
+        errs = pushIfAppropriate(errs, {
+            ...maxItemsError,
+            message: `Array contains more than the maxItems value ${schema.maxItems}`
+        })
+    }
 
     for (let i = 0; i < data.length; i++) {
         
@@ -65,14 +100,36 @@ export function validateArraySchema(validateSchema: ValidateSchema,
         }
 
         if (contains && validateSchema(context, contains, data[i]).length === 0) {
-            contains = null
+            containsCount += 1
+
+            // no need to evaluate contains any more
+            if (schema.maxContains == null && containsCount >= (schema.minContains || 0)) {
+                contains = null
+            }
         }
     }
 
-    if (contains) {
-        errs = pushIfAppropriate(errs, containsErrors)
+    if (!contains)
+        return errs || emptyErrors
+    
+    if (containsCount > (schema.maxContains || Number.MAX_SAFE_INTEGER)) {
+        errs = pushIfAppropriate(errs, {
+            ...maxContainsError,
+            message: `Array contains more than the maxContains value ${schema.maxContains}`
+        })
+    }
+    
+    if (containsCount < (schema.minContains || 0)) {
+        errs = pushIfAppropriate(errs, {
+            ...minContainsError,
+            message: `Array contains less than the minContains value ${schema.minContains}`
+        })
     }
 
+    if (schema.minContains == null && containsCount == 0) {
+        errs = pushIfAppropriate(errs, containsErrors)
+    }
+    
     return errs || emptyErrors
 }
 

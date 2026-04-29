@@ -1,6 +1,6 @@
 
 import { test } from 'node:test';
-import { failure, schemaError, success, validate } from "../shared.mjs"
+import { assertValidation, schemaError, validate } from "../shared.mjs"
 import { JsonDocument } from '../../src/jsonSchema.js';
 import { tpl } from '../../src/utils.js';
 
@@ -24,14 +24,14 @@ test('ref', { concurrency: true }, t => {
             }
         }
 
-        t.test(`Success: ${ref}`, () => success(() =>
+        t.test(`Success: ${ref}`, () => assertValidation(() =>
             validate(schema, { prop: true })));
 
-        t.test(`Failure, invalid value: ${ref}`, () => failure(() =>
+        t.test(`Failure, invalid value: ${ref}`, () => assertValidation(() =>
             validate(schema, { prop: 333 }),
             [{ schema: `#/properties/prop/#/$defs/${ref}/type`, field: "prop" }]));
 
-        t.test(`Failure, null: ${ref}`, () => failure(() =>
+        t.test(`Failure, null: ${ref}`, () => assertValidation(() =>
             validate(schema, { prop: null }),
             [{ schema: `#/properties/prop/#/$defs/${ref}/type`, field: "prop" }]));
     }

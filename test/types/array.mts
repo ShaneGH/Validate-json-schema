@@ -1,6 +1,6 @@
 
 import { test } from 'node:test';
-import { failure, success, validate } from "../shared.mjs"
+import { assertValidation, validate } from "../shared.mjs"
 import { JsonDocument } from '../../src/jsonSchema.js';
 import { tpl } from '../../src/utils.js';
 
@@ -17,27 +17,31 @@ test('array', { concurrency: true }, t => {
         }
     }
 
-    t.test(`Success`, () => success(() =>
+    t.test(`Success`, () => assertValidation(() =>
         validate(schema, { prop: [true, false] })));
 
-    t.test(`Success (empty)`, () => success(() =>
+    t.test(`Success (empty)`, () => assertValidation(() =>
         validate(schema, { prop: [] })));
 
-    t.test(`Incorrect data type`, () => failure(() =>
+    t.test(`Incorrect data type`, () => assertValidation(() =>
         validate(schema, { prop: 333 }),
         [{ schema: "#/properties/prop/type", field: "prop" }]));
 
-    t.test(`null`, () => failure(() =>
+    t.test(`null`, () => assertValidation(() =>
         validate(schema, { prop: null }),
         [{ schema: "#/properties/prop/type", field: "prop" }]));
 
-    t.test(`Good data and null`, () => failure(() =>
+    t.test(`Good data and null`, () => assertValidation(() =>
         validate(schema, { prop: [true, null] }),
         [{ schema: "#/properties/prop/items/type", field: "prop/1" }]));
 
-    t.test(`Good and bad data`, () => failure(() =>
+    t.test(`Good and bad data`, () => assertValidation(() =>
         validate(schema, { prop: ["", true] }),
         [{ schema: "#/properties/prop/items/type", field: "prop/0" }]));
+
+    t.test("unevaluatedItems", t => {
+        // TODO
+    })
 
     t.test("prefixItems", t => {
         const schema: Partial<JsonDocument> = {
@@ -57,7 +61,7 @@ test('array', { concurrency: true }, t => {
         }
 
         for (let i = 4; i >= 0; i--) {
-            t.test(`${i}`, () => success(() =>
+            t.test(`${i}`, () => assertValidation(() =>
                 validate(
                     schema, 
                     { prop: ["xx", 4, true, false].slice(0, i) })));
@@ -71,7 +75,7 @@ test('array', { concurrency: true }, t => {
 
         for (let i = 3; i >= 0; i--) {
 
-            t.test(`invalid ${i}`, () => failure(() =>
+            t.test(`invalid ${i}`, () => assertValidation(() =>
                 validate(
                     schema, 
                     { prop: replace(["xx", 4, true, false], i, {}) }),
@@ -92,18 +96,65 @@ test('array', { concurrency: true }, t => {
             }
         }
 
-        t.test(`Success`, () => success(() =>
+        t.test(`Success`, () => assertValidation(() =>
             validate(schema, { prop: ["aa", "bb"] })));
 
         for (let [name, value] of [
             tpl("Empty", []), 
             tpl("Doesn't contain", [true])]) {
 
-            t.test(name, () => failure(() =>
+            t.test(name, () => assertValidation(() =>
                 validate(
                     schema, 
                     { prop: value }),
                 { schema: "#/properties/prop/contains", field: `prop`}));
+        }
+    })
+
+    t.test("bounded Contains", t => {
+        const schema: Partial<JsonDocument> = {
+            properties: {
+                "prop": {
+                    "maxContains": 3,
+                    "minContains": 1,
+                    "contains": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+
+        for (const x of [["aa", 1], ["aa", 1, "aa"], ["aa", "aa", 1, "aa"]]) {
+            t.test(`Success`, () => assertValidation(() =>
+                validate(schema, { prop: x })));
+        }
+
+        for (const [constraint, prop] of [tpl("minContains", [1]), tpl("maxContains", ["aa", "aa", 1, "aa", "aa"])]) {
+            t.test(`Failure`, () => assertValidation(() =>
+                validate(schema, { prop }),
+                {schema: `#/properties/prop/${constraint}`, field: "prop"}));
+        }
+    })
+
+    t.test("bounded length", t => {
+        const schema: Partial<JsonDocument> = {
+            properties: {
+                "prop": {
+                    "maxItems": 3,
+                    "minItems": 1
+                }
+            }
+        }
+
+        for (const prop of [[1], [1, 2], [1,2,3]]) {
+            t.test(`Success ${prop.length}`, () => assertValidation(() =>
+                validate(schema, { prop })));
+        }
+
+        for (const [constraint, prop] of [tpl("minItems", []), tpl("maxItems", [1,2,3,4])]) {
+            t.test(`Failure ${prop.length}`, () => assertValidation(() =>
+                validate(schema, { prop }),
+                {schema: `#/properties/prop/${constraint}`, field: "prop"}));
         }
     })
 });

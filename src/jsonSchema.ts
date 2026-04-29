@@ -1,3 +1,5 @@
+// TODO: good list of features here https://www.learnjsonschema.com/2019-09/applicator/unevaluateditems/
+
 export type Draft04 = "http://json-schema.org/draft-04/schema#"
 
 export type SchemaVersions =
@@ -40,12 +42,24 @@ export type ObjectSchema = Readonly<Partial<Pick<{
     "required": readonly string[]
 }, typeof ObjectSchemaTemplate[number]>>>
 
-export const ArraySchemaTemplate = ["items", "prefixItems", "contains", "unevaluatedItems"] as const
+export const ArraySchemaTemplate = [
+    "items", 
+    "prefixItems", 
+    "contains", 
+    "unevaluatedItems", 
+    "minItems", 
+    "maxItems", 
+    "minContains", 
+    "maxContains"] as const
 export type ArraySchema = Readonly<Partial<Pick<{
     "items": Schema
     "prefixItems": readonly Schema[]
     "contains": Schema,
     "unevaluatedItems": Schema,
+    "minItems": number,
+    "maxItems": number,
+    "minContains": number,
+    "maxContains": number
 }, typeof ArraySchemaTemplate[number]>>>
 
 export const StringSchemaTemplate = ["maxLength", "minLength", "pattern"] as const
