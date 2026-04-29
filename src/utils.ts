@@ -1,7 +1,8 @@
 import { SchemaType } from "./jsonSchema.js"
 
-export function tpl<T1, T2>(x: T1, y: T2): [T1, T2]
-export function tpl<T1, T2, T3>(x: T1, y: T2, z: T3): [T1, T2, T3]
+export function tpl<T1, T2>(x1: T1, x2: T2): [T1, T2]
+export function tpl<T1, T2, T3>(x1: T1, x2: T2, x3: T3): [T1, T2, T3]
+export function tpl<T1, T2, T3, T4>(x1: T1, x2: T2, x3: T3, x4: T4): [T1, T2, T3, T4]
 export function tpl(): any {
     return [...arguments]
 }

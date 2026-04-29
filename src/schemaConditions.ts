@@ -1,7 +1,8 @@
 import { Schema, ConcreteSchema, TypedSchema } from "./jsonSchema.js"
 import { ValidationContext } from "./validationContext.js"
-import { tpl, logAnd, dirAnd, pushIfAppropriate, isReadOnlyArray } from "./utils.js"
+import { tpl, pushIfAppropriate } from "./utils.js"
 
+const emptyErrors: readonly SchemaError[] = []
 const emptyReadOnlyList: readonly any[] = []
 const emptyRefPaths: readonly RefPath[] = []
 const emptyStrings: readonly string[] = []
@@ -182,6 +183,28 @@ function not(schemaCondition: NotCondition, f: ExecuteFunction): readonly Schema
     }]
 }
 
+const thenString = "then"
+const elseString = "else"
+export type IfCondition = Readonly<{
+    $type: "if"
+    condition: SchemaCondition
+    then?: SchemaCondition
+    else?: SchemaCondition
+}>
+function ifCondition(schemaCondition: IfCondition, f: ExecuteFunction): readonly SchemaError[] {
+    return _ifCondition(schemaCondition, f) || emptyErrors
+}
+function _ifCondition(schemaCondition: IfCondition, f: ExecuteFunction): readonly SchemaError[] | undefined {
+
+    return execute(schemaCondition.condition, f).length
+
+        ? schemaCondition[elseString] && execute(schemaCondition[elseString], f)
+            .map(e => ({...e, schemaPath: [elseString, ...e.schemaPath]}))
+
+        : schemaCondition[thenString] && execute(schemaCondition[thenString], f)
+            .map(e => ({...e, schemaPath: [thenString, ...e.schemaPath]}))
+}
+
 export type Leaf = Readonly<{
     $type: "leaf"
     schema: ConcreteSchema
@@ -201,6 +224,7 @@ export type SchemaCondition =
     | NotCondition
     | RootCondition
     | RefCondition
+    | IfCondition
 
 function prependSchemaPath(
     errors: readonly SchemaError[], 
@@ -232,6 +256,7 @@ export function execute(
         case "not": return not(schemaCondition, f)
         case "root": return root(schemaCondition, f)
         case "ref":return ref(schemaCondition, f)
+        case "if":return ifCondition(schemaCondition, f)
         default: return f(schemaCondition.schema)
     }
 }
@@ -283,6 +308,15 @@ function _build(context: ValidationContext, schema: Schema, refPath: readonly Re
         topLevel = pushCondition(topLevel, {
             $type: "not",
             condition: _build(context, schema.not, refPath)
+        })
+    }
+
+    if (schema["if"]) {
+        topLevel = pushCondition(topLevel, {
+            $type: "if",
+            condition: _build(context, schema["if"], refPath),
+            "then": schema["then"] && _build(context, schema["then"], refPath),
+            "else": schema["else"] && _build(context, schema["else"], refPath)
         })
     }
 

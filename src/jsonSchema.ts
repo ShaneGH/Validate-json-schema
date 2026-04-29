@@ -17,6 +17,9 @@ export type Extensions = Readonly<Partial<{
     "allOf": readonly Schema[]
     "oneOf": readonly Schema[]
     "not": Schema
+    "if": Schema
+    "then": Schema
+    "else": Schema
 }>>
 
 export type SchemaType = "object" | "array" | "string" | "number" | "integer" | "boolean" | "null"

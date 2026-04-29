@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import { assertValidation, validate } from "./shared.mjs"
 import { JsonDocument } from '../src/jsonSchema.js';
+import { tpl } from '../src/utils.js';
 
 test('conditionalSubSchema', { concurrency: true }, t => {
 
@@ -103,4 +104,40 @@ test('conditionalSubSchema', { concurrency: true }, t => {
     executeBothWays((typeInSub: boolean) => t.test(`not, fail; typeInSub: ${typeInSub}`, () => assertValidation(() => validate(schema({typeInSub,not: true}), { "p1": "xxx", "p_not": "aaa" }),
         [{schema: "#/not", field:""}]
     )))
+    
+    t.test("if/then/else", t => {
+        function schema(hasThen: boolean, hasElse: boolean): Partial<JsonDocument> {
+            return {
+                properties: {
+                    "prop": {
+                        "if": {type: "string"},
+                        "then": hasThen && {"maxLength": 2} || undefined,
+                        "else": hasElse && {"maximum": 2} || undefined
+                    }
+                }
+            }
+        }
+
+        for (const [hasThen, hasElse, prop] of [
+            tpl(false, false, "aa"),
+            tpl(true, false, "aa"),
+            tpl(false, true, 2),
+            tpl(true, true, "aa"),
+            tpl(true, true, 2)
+        ]) {
+            t.test(`Success ${[hasThen, hasElse, prop]}`, () => assertValidation(() =>
+                validate(schema(hasThen, hasElse), { prop })));
+        }
+
+        for (const [hasThen, hasElse, prop, err] of [
+            tpl(true, false, "aaa", "then/maxLength"),
+            tpl(false, true, 3, "else/maximum"),
+            tpl(true, true, "aaa", "then/maxLength"),
+            tpl(true, true, 3, "else/maximum")
+        ]) {
+            t.test(`Failure ${[hasThen, hasElse, prop]}`, () => assertValidation(() =>
+                validate(schema(hasThen, hasElse), { prop }),
+                {schema: `#/properties/prop/${err}`, field: "prop"}));
+        }
+    })
 });
