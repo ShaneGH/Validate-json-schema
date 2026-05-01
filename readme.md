@@ -8,15 +8,17 @@ good list of features here https://www.learnjsonschema.com/2020-12/
 Core
     $id
     $schema
+    $ref
     $comment
-    $recursiveAnchor
-    $recursiveRef
+    $defs
+    $anchor
+    $dynamicAnchor
+    $dynamicRef
     $vocabulary
 
 Applicator
     dependentSchemas
-    additionalItems
-    unevaluatedItems
+    propertyNames
 
 Validation
     dependentRequired
@@ -31,11 +33,15 @@ Meta Data
     readOnly
     writeOnly
 
-Format
+Format Annotation
     format
 
 Content
     contentEncoding
     contentMediaType
     contentSchema
+
+Format Assertion
+    format
+
 
