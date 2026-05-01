@@ -3,15 +3,6 @@ import { ValidationError } from "../src/validate.js"
 import assert from 'node:assert/strict';
 import { validateDocument } from "../src/validate.js";
 
-function toString(prefix: string | null, errs: ValidationError[]) {
-    return `${prefix == null ? "" : prefix}${JSON.stringify(errs, null, 2)}`
-}
-
-// export function assertValidation(f: (() => ValidationError[])) {
-//     const result = f()
-//     assert.deepEqual(result, [], toString(`Errors encountered\n`, result))
-// }
-
 type Err = {field: string, schema: string}
 export function assertValidation(f: (() => ValidationError[]), errs?: Err | Err[]) {
     if (!errs) errs = []

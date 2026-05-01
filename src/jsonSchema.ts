@@ -116,12 +116,12 @@ export type TypedSchema =
     & BooleanSchema
     & NullSchema
 
-export type TypedSchemaWithMedatata = 
+export type TypedSchemaWithMetadata = 
     & TypedSchema
     & Metadata
 
 export type ConcreteSchema = 
-    | TypedSchemaWithMedatata
+    | TypedSchemaWithMetadata
     | boolean
 
 export type Schema = 
@@ -134,7 +134,7 @@ export type JsonDocumentMetadata = Readonly<Partial<{
     "$id": string,
     "$schema": string,
     "$vocabulary": Readonly<Record<string, any>>
-}>> & TypedSchemaWithMedatata
+}>> & TypedSchemaWithMetadata
 
 // https://json-schema.org/draft/2020-12/meta/core
 // https://json-schema.org/understanding-json-schema/structuring
