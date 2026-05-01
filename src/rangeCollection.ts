@@ -183,3 +183,40 @@ export function advanceRangeCursor(
     
     return "EXHAUSTED_CURSOR"
 }
+
+export function *enumerateRangeItem(range: RangeItem | number) {
+    if (typeof range === "number") {
+        yield range
+        return
+    }
+
+    for (let i = range.from; i < range.to; i++) {
+        yield i
+    }
+
+}
+
+export function* enumerate(range: Range) {
+    for (let i = 0; i < range.items.length; i++) {
+        for (let x of enumerateRangeItem(range.items[i])) {
+            yield x
+        }
+    }
+}
+
+export function* enumerateMissing(range: Range, start: number, endExclusive: number) {
+    
+    let beforeLast = start
+    for (let i = 0; i < range.items.length; i++) {
+        const itemStart = itemFrom(range.items[i])
+        for (let j = beforeLast; j < itemStart; j++) {
+            yield j
+        }
+
+        beforeLast = itemTo(range.items[i])
+    }
+
+    for (let i = beforeLast; i < endExclusive; i++) {
+        yield i
+    }
+}

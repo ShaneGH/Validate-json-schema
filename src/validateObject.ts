@@ -34,6 +34,16 @@ function *propertySchemas(schema: ObjectSchema, property: string) {
     }
 }
 
+const maxPropertiesError = {
+    fieldPath: emptyStrings,
+    schemaPath: ["maxProperties"]
+}
+
+const minPropertiesError = {
+    fieldPath: emptyStrings,
+    schemaPath: ["minProperties"]
+}
+
 export function validateObjectSchema(validateSchema: ValidateSchema, context: ValidationContext, schema: ObjectSchema, data: any, 
     validationState: MutableValidationState): readonly SchemaError[] {
 
@@ -61,9 +71,11 @@ export function validateObjectSchema(validateSchema: ValidateSchema, context: Va
         validationState.visitedProperties.unevaluated.push(schema.unevaluatedProperties)
     }
 
+    let props = 0
     let patternPropertiesCache: Record<string, SchemaCondition> | null = null
     let additionalPropertiesCache: SchemaCondition | null = null
     for (let property in data) {
+        props += 1
         for (let sch of propertySchemas(schema, property)) {
 
             validationState.visitedProperties.visited[property] = true
@@ -97,6 +109,22 @@ export function validateObjectSchema(validateSchema: ValidateSchema, context: Va
         }
     }
 
+    if (schema.maxProperties != null && props > schema.maxProperties) {
+        errs = pushIfAppropriate(
+            errs, {
+                ...maxPropertiesError,
+                message: `Object contains more than the maxProperties value ${schema.maxProperties}`
+            });
+    }
+
+    if (schema.minProperties != null && props < schema.minProperties) {
+        errs = pushIfAppropriate(
+            errs, {
+                ...minPropertiesError,
+                message: `Object contains less than the minProperties value ${schema.minProperties}`
+            });
+    }
+
     return errs || emptyErrors
 }
 
@@ -121,6 +149,7 @@ export function completeObjectValidationState(validateSchema: ValidateSchema, co
                     ...e,
                     // TODO: schema path is not correct 
                     // if unevaluatedProperties is in a sub schema
+                    fieldPath: [...e.fieldPath, property],
                     schemaPath: ["unevaluatedProperties", ...e.fieldPath]
                 })), errs as SchemaError[] | null)
     }

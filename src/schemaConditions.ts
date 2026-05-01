@@ -186,6 +186,8 @@ function not(schemaCondition: NotCondition, f: ExecuteFunction): readonly Schema
 const thenString = "then"
 const elseString = "else"
 export type IfCondition = Readonly<{
+    // TODO: if there is no corresponding else/then condition, the field is classed
+    // as unevaluated
     $type: "if"
     condition: SchemaCondition
     then?: SchemaCondition

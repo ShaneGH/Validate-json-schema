@@ -114,3 +114,15 @@ export function checkType(type: SchemaType, data: any) {
         default: throw new Error("???T")
     }
 }
+
+export function* map<T1, T2>(xs: Generator<T1> | T1[], f: (x: T1) => T2) {
+    for (const x of xs) {
+        yield f(x)
+    }
+}
+
+export function* filter<T>(xs: Generator<T> | T[], f: (x: T) => boolean) {
+    for (const x of xs) {
+        if (f(x)) yield x
+    }
+}

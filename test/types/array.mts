@@ -39,8 +39,57 @@ test('array', { concurrency: true }, t => {
         validate(schema, { prop: ["", true] }),
         [{ schema: "#/properties/prop/items/type", field: "prop/0" }]));
 
-    t.test("unevaluatedItems", t => {
-        // TODO
+    
+    t.test("various items and prefix items cases", t => {
+        const schema: Partial<JsonDocument> = {
+            properties: {
+                "prop": {
+                    "type": "array",
+                    "items": [{
+                        "type": "string"
+                    }, {
+                        "type": "number"
+                    }]
+                }
+            }
+        }
+
+        for (const prop of [[], ["1"], ["1", 1, "1"]]) {
+            t.test(`Success ${JSON.stringify(prop)}`, () => assertValidation(() =>
+                validate(schema, {prop })));
+        }
+
+        for (const [prefixI, i, prop] of [tpl(0, 0, [1]), tpl(0, 1, ["1", "1"])]) {
+            t.test(`Failure ${JSON.stringify(prop)}`, () => assertValidation(() =>
+                validate(schema, {prop }),
+            {
+                field: `prop/${prefixI + i}`,
+                schema: `#/properties/prop/items/${i}/type`
+            }));
+        }
+
+        const schemaWithPrefix: Partial<JsonDocument> = {
+            properties: {
+                "prop": {
+                    ...(schema.properties?.prop as any),
+                    "prefixItems": [true]
+                }
+            }
+        }
+
+        for (const prop of [[], [1], [1, "1"], [1, "1", 1, "1"]]) {
+            t.test(`Success ${JSON.stringify(prop)}`, () => assertValidation(() =>
+                validate(schemaWithPrefix, {prop })));
+        }
+
+        for (const [prefixI, i, prop] of [tpl(1, 0, [1, 1]), tpl(1, 1, [1, "1", "1"])]) {
+            t.test(`Failure ${JSON.stringify(prop)}`, () => assertValidation(() =>
+                validate(schemaWithPrefix, {prop }),
+            {
+                field: `prop/${prefixI + i}`,
+                schema: `#/properties/prop/items/${i}/type`
+            }));
+        }
     })
 
     t.test("prefixItems", t => {
@@ -156,5 +205,26 @@ test('array', { concurrency: true }, t => {
                 validate(schema, { prop }),
                 {schema: `#/properties/prop/${constraint}`, field: "prop"}));
         }
+    })
+
+    t.test("unevaluated items", t => {
+        const schema: Partial<JsonDocument> = {
+            properties: {
+                "prop": {
+                    "type": "array",
+                    "items": [{"type": "string"}, {"type": "number"}],
+                    "unevaluatedItems": {"type": "boolean"}
+                }
+            }
+        }
+
+        for (const prop of [[], ["1"], ["1", 1, true, false]]) {
+            t.test(`Success ${prop.length}`, () => assertValidation(() =>
+                validate(schema, { prop })));
+        }
+
+        t.test(`Failure`, () => assertValidation(() =>
+            validate(schema, { prop: ["1", 1, "1"] }),
+            {schema: `#/properties/prop/unevaluatedItems`, field: "prop/2"}));
     })
 });

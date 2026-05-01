@@ -1,6 +1,7 @@
 import { 
     ArraySchema, 
-    ArraySchemaTemplate} from "./jsonSchema.js"
+    ArraySchemaTemplate,
+    Schema} from "./jsonSchema.js"
 import { MutableValidationState, ValidationContext } from "./validationContext.js"
 import { build as buildSchemaCondition, SchemaError, SchemaCondition } from "./schemaConditions.js"
 import {
@@ -11,7 +12,8 @@ import {
 import { 
     addToRange,
     advanceRangeCursor, 
-    create as createRange} from "./rangeCollection.js"
+    create as createRange,
+    enumerateMissing} from "./rangeCollection.js"
 
 const emptyStrings: readonly string[] = []
 const emptyErrors: readonly SchemaError[] = []
@@ -44,6 +46,17 @@ const minItemsError = {
     schemaPath: ["minItems"]
 }
 
+function buildArraySchema(
+    context: ValidationContext,
+    schema: undefined | Schema | Schema[]): undefined | SchemaCondition | SchemaCondition[] {
+
+    if (!schema) return undefined
+
+    if (Array.isArray(schema)) return schema.map(s => buildSchemaCondition(context, s))
+
+    return buildSchemaCondition(context, schema)
+}
+
 export function validateArraySchema(validateSchema: ValidateSchema, 
     context: ValidationContext, schema: ArraySchema, data: any, validationState: MutableValidationState): readonly SchemaError[] {
     if (!checkType("array", data) || !hasAtLeastOneProp(schema, ArraySchemaTemplate)) return emptyErrors
@@ -59,7 +72,7 @@ export function validateArraySchema(validateSchema: ValidateSchema,
 
     let contains = schema.contains && buildSchemaCondition(context, schema.contains) || null
     let containsCount = 0
-    let items: SchemaCondition | null | undefined = null
+    let items: SchemaCondition | SchemaCondition[] | null | undefined = null
     let errs: SchemaError[] | null = null
 
     if (data.length < (schema.minItems || 0)) {
@@ -78,9 +91,15 @@ export function validateArraySchema(validateSchema: ValidateSchema,
 
     for (let i = 0; i < data.length; i++) {
         
-        const itemSchema = schema.prefixItems && i < schema.prefixItems.length
+        let itemSchema = schema.prefixItems && i < schema.prefixItems.length
             ? buildSchemaCondition(context, schema.prefixItems[i])
-            : (items = items || (schema.items && buildSchemaCondition(context, schema.items)))
+            : (items = items || buildArraySchema(context, schema.items))
+
+        let schemaI: null | number = null
+        if (Array.isArray(itemSchema)) {
+            schemaI = i - (schema.prefixItems?.length || 0)
+            itemSchema = itemSchema[schemaI]
+        }
 
         if (!itemSchema && !contains) break
 
@@ -91,7 +110,9 @@ export function validateArraySchema(validateSchema: ValidateSchema,
                 e => ({
                     ...e,
                     schemaPath: items
-                        ? ["items", ...e.schemaPath]
+                        ? schemaI == null 
+                            ? ["items", ...e.schemaPath]
+                            : ["items", schemaI.toString(), ...e.schemaPath]
                         : ["prefixItems", i.toString(), ...e.schemaPath],
                     fieldPath: [i.toString(), ...e.fieldPath]
                 }));
@@ -139,35 +160,24 @@ export function completeArrayValidationState(validateSchema: ValidateSchema,
     if (!validationState.visitedItems.unevaluated?.length) return emptyErrors
     if (!data.length) return emptyErrors
 
-    const reduceState = {
-        visited: validationState.visitedItems.visited,
-        unevaluatedSchemas: validationState.visitedItems.unevaluated,
-        rangeCursor: 0 as number | "EXHAUSTED_CURSOR",
-        unevaluatedConditions: null as SchemaCondition[] | null,
-        errs: null as SchemaError[] | null
-    }
+    let errs: SchemaError[] | null = null
+    let unevaluatedConditions: SchemaCondition[] | null = null
+    for (const i of enumerateMissing(validationState.visitedItems.visited, 0, data.length)) {
+        unevaluatedConditions = unevaluatedConditions || validationState.visitedItems.unevaluated
+            .map(s => buildSchemaCondition(context, s))
 
-    return (data as {}[]).reduce<typeof reduceState>((s, x, i) => {
-        
-        if (s.rangeCursor !== "EXHAUSTED_CURSOR") {
-            const adv = advanceRangeCursor(s.visited, s.rangeCursor, i)
-            if (adv !== "NOT_FOUND") s.rangeCursor = adv
-
-            if (typeof adv === "number") return s
+        for (const c of unevaluatedConditions) {
+            errs = pushIfAppropriate(
+                errs, 
+                validateSchema(context, c, data[i]), e => ({
+                    ...e,
+                    // TODO: schema path is not correct 
+                    // if unevaluatedItems is in a sub schema
+                    fieldPath: [...e.fieldPath, i.toString()],
+                    schemaPath: ["unevaluatedItems", ...e.fieldPath]
+                }))
         }
-
-        s.errs = (s.unevaluatedConditions = s.unevaluatedConditions || s.unevaluatedSchemas
-            .map(s => buildSchemaCondition(context, s)))
-            .reduce((err, c) => 
-                pushIfAppropriate(
-                    err, 
-                    validateSchema(context, c, x), e => ({
-                        ...e,
-                        // TODO: schema path is not correct 
-                        // if unevaluatedItems is in a sub schema
-                        schemaPath: ["unevaluatedItems", ...e.fieldPath]
-                    })), s.errs)
-
-        return s
-    }, reduceState).errs || emptyErrors
+    }
+    
+    return errs || emptyErrors
 }
