@@ -187,7 +187,7 @@ const thenString = "then"
 const elseString = "else"
 export type IfCondition = Readonly<{
     // TODO: if there is no corresponding else/then condition, the field is classed
-    // as unevaluated
+    // as unevaluated (or is it?????)
     $type: "if"
     condition: SchemaCondition
     then?: SchemaCondition

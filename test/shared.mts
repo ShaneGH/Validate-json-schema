@@ -2,6 +2,7 @@ import { JsonDocument } from "../src/jsonSchema.js"
 import { ValidationError } from "../src/validate.js"
 import assert from 'node:assert/strict';
 import { validateDocument } from "../src/validate.js";
+import { tpl } from "../src/utils.js";
 
 type Err = {field: string, schema: string}
 export function assertValidation(f: (() => ValidationError[]), errs?: Err | Err[]) {
@@ -39,6 +40,29 @@ export const freakyObject = {
         }
     }],
     "z": 3.4
+}
+
+export function delay(ms: number) {
+    return new Promise(res => setTimeout(res, ms))
+}
+
+export function shuffledNumbers(toExclusive: number): number[]
+export function shuffledNumbers(from: number, toExclusive: number): number[]
+export function shuffledNumbers(x1: number, x2?: number): number[] {
+    if (x2 == null) {
+        x2 = x1
+        x1 = 0
+    }
+
+    return shuffle([...Array(x2 - x1).keys()]
+        .map((_, i) => i + x1));
+}
+
+export function shuffle<T>(xs: T[]): T[] {
+    return xs
+        .map(x => tpl(Math.random(), x))
+        .sort((x, y) => x[0] - y[0])
+        .map(x => x[1]);
 }
 
 export function validate(document: JsonDocument, data: any, retreivalUri?: URL): ValidationError[] {

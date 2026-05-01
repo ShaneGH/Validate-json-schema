@@ -8,11 +8,19 @@ import {
     hasAtLeastOneProp,
     checkType
 } from "./utils.js"
+import { create, get, put, NOT_FOUND, getOrPut } from "./rotatingCache.js"
 
 const emptyStrings: readonly string[] = []
 const emptyErrors: readonly SchemaError[] = []
 
 type ValidateSchema = (context: ValidationContext, schema: SchemaCondition, data: any) => readonly SchemaError[]
+
+// TODO: magic number
+const rxCache = create<RegExp>(256)
+
+function newRegex(rx: string) {
+    return new RegExp(rx)
+}
 
 function *propertySchemas(schema: ObjectSchema, property: string) {
     let found = false
@@ -22,8 +30,7 @@ function *propertySchemas(schema: ObjectSchema, property: string) {
     }
 
     for (let rx in schema.patternProperties) {
-        // todo regex cache
-        if (!new RegExp(rx).test(property)) continue
+        if (!getOrPut(rxCache, rx, newRegex).test(property)) continue
         
         found = true
         yield tpl(["patternProperties", rx], schema.patternProperties[rx])

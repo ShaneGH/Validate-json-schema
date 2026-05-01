@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addToRange, advanceRangeCursor, create, enumerate, enumerateMissing, forceCompact, itemFrom, itemTo } from "../src/rangeCollection.js"
+import { shuffle, shuffledNumbers } from './shared.mjs';
 
 // rangeCollection is a private component, but has sufficient complexity to require testing
 
@@ -33,10 +34,7 @@ test('rangeCollection', { concurrency: true }, t => {
 
         const range = create()
 
-        const numbers = [...Array(500).keys()]
-            .map((_, i) => [Math.random(), i])
-            .sort((x, y) => x[0] - y[0])
-            .map(x => x[1]);
+        const numbers = shuffledNumbers(500);
 
         // add every third number
         const added: Record<number, true> = {}
@@ -94,11 +92,7 @@ test('rangeCollection', { concurrency: true }, t => {
     t.test('enumerate tests', () => {
 
         const numbersBase = [...Array(500).keys()]
-        const numbers = numbersBase
-            .map((_, i) => [Math.random(), i])
-            .sort((x, y) => x[0] - y[0])
-            .map(x => x[1])
-            .slice(0, 200);
+        const numbers = shuffle(numbersBase).slice(0, 200);
 
         const range = create()
         const added: Record<number, true> = {}
