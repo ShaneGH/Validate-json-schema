@@ -126,3 +126,60 @@ export function* filter<T>(xs: Generator<T> | T[], f: (x: T) => boolean) {
         if (f(x)) yield x
     }
 }
+
+// const trueHash = Math.floor(Math.random() * 2^32)
+// const falseHash = Math.floor(Math.random() * 2^32)
+// const nullHash = Math.floor(Math.random() * 2^32)
+// const emptyArrayHash = Math.floor(Math.random() * 2^32)
+// const emptyObjectHash = Math.floor(Math.random() * 2^32)
+// const emptyStringHash = Math.floor(Math.random() * 2^32)
+
+// // TODO: quick and dirty
+// const stringHash = (function stringHash() {
+//     return function (str: string) {
+//         let crc = emptyStringHash;
+//         for(let i = 0; i < str.length; i++) {
+//             crc = hashCombine(crc, str.charCodeAt(i))
+//         }
+
+//         return (crc ^ (-1)) >>> 0;
+//     };
+// }())
+
+// function hashCombine(x: number, y: number) {
+//     return (x >>> 8) ^ y
+// }
+
+// /** Returns null if x is undefined. 
+//  * Complex object (e.g. Regexp, Date are treated like POJOs)
+//  * 
+//  * Hashes are only comparably valid on this thread, 
+//  * i.e. the same data in different processes or workers will hash to different values
+//  */
+// export function deepHash(x: any): number | null {
+//     if (typeof x === "string") return stringHash(x)
+//     if (typeof x === "number") return x
+//     if (typeof x === "boolean") return x ? trueHash : falseHash
+//     if (typeof x === "undefined") return null
+//     if (x === null) return nullHash
+
+//     if (Array.isArray(x)) {
+//         let h = emptyArrayHash
+//         for (const y of x) {
+//             h = (h >>> 8) ^ (deepHash(y) || 1) & 0xFF;
+//         }
+
+//         return h
+//     }
+
+//     let h = emptyObjectHash
+//     for (const p in x) {
+//         const result = deepHash(x[p])
+//         if (result === null) continue
+
+//         h = (h >>> 8) ^ (stringHash(p) || 1) & 0xFF;
+//         h = (h >>> 8) ^ (result || 1) & 0xFF;
+//     }
+
+//     return h
+// }

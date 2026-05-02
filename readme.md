@@ -17,7 +17,7 @@ Core
     $vocabulary
 
 Validation
-    uniqueItems
+    uniqueItems - started in utils. Simpler hash combine function would be better
 
 Meta Data
     title
