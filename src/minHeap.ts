@@ -2,6 +2,7 @@
 export type Compare<T> = (x: T, y: T) => number
 export type OnIndexChange<T> = (x: T, newIndex: number) => void
 
+/** Return the index of the smallest item in values[] or -1 if no values are supplied */
 function smallest<T>(compare: Compare<T>, ...values: T[]): number;
 function smallest<T>(compare: Compare<T>): number {
     if (arguments.length === 1) return -1
@@ -22,9 +23,9 @@ function bubbleDown<T>(heap: T[], compare: Compare<T>, index: number, onIndexCha
     if (l >= heap.length) return
 
     const r = l + 1
-    const smallestVal = r < heap.length
-        ? smallest(compare, heap[index], heap[l], heap[r])
-        : smallest(compare, heap[index], heap[l])
+    const smallestVal = r >= heap.length
+        ? smallest(compare, heap[index], heap[l])
+        : smallest(compare, heap[index], heap[l], heap[r])
 
     switch (smallestVal) {
         case 0: 
@@ -42,11 +43,13 @@ function bubbleDown<T>(heap: T[], compare: Compare<T>, index: number, onIndexCha
 }
 
 function swap<T>(xs: T[], i: number, j: number, onIndexChange: OnIndexChange<T> | undefined) {
+    if (i === j) return
+    
     const tmp = xs[i]
     xs[i] = xs[j]
     xs[j] = tmp
 
-    if(onIndexChange) {
+    if (onIndexChange) {
         onIndexChange(xs[j], j)
         onIndexChange(xs[i], i)
     }

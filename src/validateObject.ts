@@ -67,22 +67,39 @@ export function validateObjectSchema(validateSchema: ValidateSchema, context: Va
         })
     }
 
+    
     if (!validationState.visitedProperties) {
         validationState.visitedProperties = {visited: {}}
     }
-
+    
     if (schema.unevaluatedProperties) {
         validationState.visitedProperties.unevaluated = 
-            validationState.visitedProperties.unevaluated || []
-
+        validationState.visitedProperties.unevaluated || []
+        
         validationState.visitedProperties.unevaluated.push(schema.unevaluatedProperties)
     }
-
+    
     let props = 0
+    let propertyNames: SchemaCondition | null = null
     let patternPropertiesCache: Record<string, SchemaCondition> | null = null
     let additionalPropertiesCache: SchemaCondition | null = null
     for (let property in data) {
         props += 1
+
+        propertyNames = propertyNames 
+            || (schema.propertyNames && buildSchemaCondition(context, schema.propertyNames))
+            || null
+
+        if (propertyNames) {
+            errs = pushIfAppropriate(
+                errs, 
+                validateSchema(context, propertyNames, property),
+            e => ({
+                ...e,
+                schemaPath: ["propertyNames", ...e.schemaPath]
+            }))
+        }
+
         for (let sch of propertySchemas(schema, property)) {
 
             validationState.visitedProperties.visited[property] = true
