@@ -100,6 +100,20 @@ export function validateObjectSchema(validateSchema: ValidateSchema, context: Va
             }))
         }
 
+        const dep = data[property] !== undefined && schema.dependantSchemas?.[property]
+        if (dep) {
+            errs = pushIfAppropriate(
+                errs, 
+                validateSchema(
+                    context, 
+                    buildSchemaCondition(context, dep), 
+                    data),
+            e => ({
+                ...e,
+                schemaPath: ["dependantSchemas", property, ...e.schemaPath]
+            }))
+        }
+
         for (let sch of propertySchemas(schema, property)) {
 
             validationState.visitedProperties.visited[property] = true

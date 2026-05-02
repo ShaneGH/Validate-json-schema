@@ -16,10 +16,6 @@ Core
     $dynamicRef
     $vocabulary
 
-Applicator
-    dependentSchemas
-    propertyNames
-
 Validation
     dependentRequired
     uniqueItems

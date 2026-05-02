@@ -7,6 +7,35 @@ import { tpl } from '../../src/utils.js';
 // not many tests here, most tests are on objects
 test('object', { concurrency: true }, t => {
 
+    t.test("dependantSchemas", t => {
+        const schema: Partial<JsonDocument> = {
+            properties: {
+                prop: {
+                    type: "object",
+                    properties: {
+                        "prop1": { "type": "string" }
+                    },
+                    dependantSchemas: { 
+                        "enableDep": {
+                            "propertyNames": {
+                                "pattern": "^enableDep|prop1$"
+                            }
+                        } 
+                    }
+                }
+            }
+        }
+
+        for (const prop of [{ "prop1": "xx", "prop2": "xx" }, { "prop1": "xx", "enableDep": "xx" }]) {
+            t.test(`Success ${JSON.stringify(prop)}`, () => assertValidation(() =>
+                validate(schema, {prop})));
+        }
+
+        t.test(`Failure`, () => assertValidation(() =>
+            validate(schema, {prop: { "prop1": "xx", "prop2": "xx", "enableDep": "xx" }}),
+            { field: `prop`, schema: `#/properties/prop/dependantSchemas/enableDep/propertyNames/pattern` }));
+    })
+
     t.test("propertyNames", t => {
         const schema: Partial<JsonDocument> = {
             properties: {
