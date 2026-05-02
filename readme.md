@@ -17,7 +17,6 @@ Core
     $vocabulary
 
 Validation
-    dependentRequired
     uniqueItems
 
 Meta Data

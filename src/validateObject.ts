@@ -8,7 +8,7 @@ import {
     hasAtLeastOneProp,
     checkType
 } from "./utils.js"
-import { create, get, put, NOT_FOUND, getOrPut } from "./rotatingCache.js"
+import { create, getOrPut } from "./rotatingCache.js"
 
 const emptyStrings: readonly string[] = []
 const emptyErrors: readonly SchemaError[] = []
@@ -100,18 +100,35 @@ export function validateObjectSchema(validateSchema: ValidateSchema, context: Va
             }))
         }
 
-        const dep = data[property] !== undefined && schema.dependantSchemas?.[property]
-        if (dep) {
+        const dependantSchema = data[property] !== undefined && schema.dependantSchemas?.[property]
+        if (dependantSchema) {
             errs = pushIfAppropriate(
                 errs, 
                 validateSchema(
                     context, 
-                    buildSchemaCondition(context, dep), 
+                    buildSchemaCondition(context, dependantSchema), 
                     data),
             e => ({
                 ...e,
                 schemaPath: ["dependantSchemas", property, ...e.schemaPath]
             }))
+        }
+
+        let dependentRequiredI = -1
+        const dependentRequired = data[property] !== undefined 
+            && schema.dependentRequired?.[property]
+            || emptyStrings
+        for (let dep of dependentRequired) {
+            dependentRequiredI += 1
+            if (data[dep] !== undefined) continue
+
+            errs = pushIfAppropriate(
+                errs, 
+                {
+                    fieldPath: [property],
+                    schemaPath: ["dependentRequired", property, dependentRequiredI.toString()],
+                    message: `Dependent field "${dep}" is required`
+                })
         }
 
         for (let sch of propertySchemas(schema, property)) {

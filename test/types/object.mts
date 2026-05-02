@@ -36,6 +36,40 @@ test('object', { concurrency: true }, t => {
             { field: `prop`, schema: `#/properties/prop/dependantSchemas/enableDep/propertyNames/pattern` }));
     })
 
+    t.test("dependentRequired", t => {
+        const schema: Partial<JsonDocument> = {
+            properties: {
+                prop: {
+                    type: "object",
+                    properties: {
+                        "prop1": { "type": "string" }
+                    },
+                    dependentRequired: { 
+                        "prop2": ["prop3", "prop4"]
+                    }
+                }
+            }
+        }
+
+        for (const prop of [{}, { "prop1": "xx" }, { "prop1": "xx", "prop2": "xx", "prop3": "xx", "prop4": "xx" }]) {
+            t.test(`Success ${JSON.stringify(prop)}`, () => assertValidation(() =>
+                validate(schema, {prop})));
+        }
+
+        for (const [missing, prop] of [
+            tpl([0, 1], { "prop2": "xx" }), 
+            tpl([1], { "prop2": "xx", "prop3": "xx" }), 
+            tpl([0], { "prop2": "xx", "prop4": "xx" })
+        ]) {
+            t.test(`Failure ${JSON.stringify(prop)}`, () => assertValidation(() =>
+                validate(schema, {prop}), missing
+                    .map(x => ({ 
+                        field: `prop/prop2`, 
+                        schema: `#/properties/prop/dependentRequired/prop2/${x}` 
+                    }))));
+        }
+    })
+
     t.test("propertyNames", t => {
         const schema: Partial<JsonDocument> = {
             properties: {

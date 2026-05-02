@@ -43,7 +43,8 @@ export const ObjectSchemaTemplate = [
     "required", 
     "unevaluatedProperties", 
     "maxProperties", 
-    "minProperties"
+    "minProperties",
+    "dependentRequired"
 ] as const
 export type ObjectSchema = Readonly<Partial<Pick<{
     "properties": Record<string, Schema>,
@@ -52,6 +53,7 @@ export type ObjectSchema = Readonly<Partial<Pick<{
     "maxProperties": number
     "minProperties": number
     "propertyNames": Schema,
+    "dependentRequired": Record<string, readonly string[]>
     "patternProperties": Record<string, Schema>,
     "dependantSchemas": Record<string, Schema>,
     "required": readonly string[]
